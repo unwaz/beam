@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.5)
+
 set (TARGET_NAME "beam-wallet-ui")
 
 if(LINUX)
@@ -115,8 +117,7 @@ set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME ${OUTPUT_NAME})
 
 configure_file("${PROJECT_SOURCE_DIR}/version.h.in" "${CMAKE_CURRENT_BINARY_DIR}/version.h")
 
-add_dependencies(${TARGET_NAME} wallet mnemonic qrcode)
-target_link_libraries(${TARGET_NAME} qrcode)
+target_link_libraries(${TARGET_NAME} PRIVATE qrcode)
 
 if(LINUX)
 	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -127,16 +128,14 @@ target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_PREFIX_PATH}/include/Q
 target_include_directories(${TARGET_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/3rdparty/quazip)
 add_definitions(-DQUAZIP_STATIC)
 
-add_dependencies(${TARGET_NAME} quazip_static)
-target_link_libraries(${TARGET_NAME} quazip_static)
+target_link_libraries(${TARGET_NAME} PRIVATE quazip_static)
 
 #if (BEAM_WALLET_WITH_NODE)
 	add_definitions(-DBEAM_WALLET_WITH_NODE)
-	add_dependencies(${TARGET_NAME} node external_pow)
-	target_link_libraries(${TARGET_NAME} node external_pow)
+	target_link_libraries(${TARGET_NAME} PRIVATE node external_pow)
 #endif()
 
-target_link_libraries(${TARGET_NAME} wallet mnemonic Qt5::Qml Qt5::Quick Qt5::Svg Qt5::PrintSupport)
+target_link_libraries(${TARGET_NAME} PRIVATE wallet mnemonic Qt5::Qml Qt5::Quick Qt5::Svg Qt5::PrintSupport)
 
 if (BEAM_SIGN_PACKAGE AND WIN32)
     add_custom_command(
@@ -163,10 +162,10 @@ if(BEAM_USE_STATIC)
 			qml/QtGraphicalEffects/private/qtgraphicaleffectsprivate qml/QtQuick/Layouts/qquicklayoutsplugin qml/QtQuick/Controls.2/qtquickcontrols2plugin
 			qml/QtQuick/Templates.2/qtquicktemplates2plugin plugins/platforms/qwindows plugins/imageformats/qsvg plugins/printsupport/windowsprintersupport)
 
-			target_link_libraries(${TARGET_NAME} ${CMAKE_PREFIX_PATH}/${lib}.lib)
+			target_link_libraries(${TARGET_NAME} PRIVATE ${CMAKE_PREFIX_PATH}/${lib}.lib)
 		endforeach()
 
-		target_link_libraries(${TARGET_NAME} Netapi32.lib version.lib winmm.lib Imm32.lib Dwmapi.lib)
+		target_link_libraries(${TARGET_NAME} PRIVATE Netapi32.lib version.lib winmm.lib Imm32.lib Dwmapi.lib)
 
 	endif()
 
@@ -192,10 +191,10 @@ if(BEAM_USE_STATIC)
 			qml/QtQuick/Layouts/libqquicklayoutsplugin qml/QtQuick/Controls.2/libqtquickcontrols2plugin qml/QtQuick/Templates.2/libqtquicktemplates2plugin
 			plugins/platforms/libqcocoa plugins/platforms/libqminimal plugins/imageformats/libqsvg plugins/printsupport/libcocoaprintersupport)
 
-			target_link_libraries(${TARGET_NAME} ${CMAKE_PREFIX_PATH}/${lib}.a)
+			target_link_libraries(${TARGET_NAME} PRIVATE ${CMAKE_PREFIX_PATH}/${lib}.a)
 		endforeach()
 
-		target_link_libraries(${TARGET_NAME}
+		target_link_libraries(${TARGET_NAME} PRIVATE
 			"-framework CoreFoundation"
 			"-framework Foundation"
 			"-framework DiskArbitration"
@@ -219,14 +218,14 @@ if(BEAM_USE_STATIC)
 
 	if(LINUX)
 
-		target_link_libraries(${TARGET_NAME} -static-libstdc++ -static-libgcc)
+		target_link_libraries(${TARGET_NAME} PRIVATE -static-libstdc++ -static-libgcc)
 
-		target_link_libraries(${TARGET_NAME}
+		target_link_libraries(${TARGET_NAME} PRIVATE
 			${CMAKE_PREFIX_PATH}/plugins/platforms/libqxcb.a
 			${CMAKE_PREFIX_PATH}/plugins/xcbglintegrations/libqxcb-glx-integration.a
 		)
 
-		target_link_libraries(${TARGET_NAME}
+		target_link_libraries(${TARGET_NAME} PRIVATE
 			${CMAKE_PREFIX_PATH}/qml/QtQuick.2/libqtquick2plugin.a
 			${CMAKE_PREFIX_PATH}/qml/QtQuick/Window.2/libwindowplugin.a
 			${CMAKE_PREFIX_PATH}/qml/QtQuick/Controls/libqtquickcontrolsplugin.a
@@ -254,13 +253,13 @@ if(BEAM_USE_STATIC)
 			Qt5Xml xcb-static Qt5Gamepad Qt5NetworkAuth Qt5QmlDevTools
 			Qt5Scxml Qt5ThemeSupport Qt5XmlPatterns Qt5DBus Qt5GlxSupport
 		)
-			target_link_libraries(${TARGET_NAME} ${CMAKE_PREFIX_PATH}/lib/lib${lib}.a)
+			target_link_libraries(${TARGET_NAME} PRIVATE ${CMAKE_PREFIX_PATH}/lib/lib${lib}.a)
 		endforeach()
 
-		target_link_libraries(${TARGET_NAME} -lX11-xcb -lX11 -lxcb -lGL -lfreetype -lfontconfig -lXi -lXext -lXfixes -lXrender -lglib-2.0 -lSM -lICE -lcups -lxcb-glx)
+		target_link_libraries(${TARGET_NAME} PRIVATE -lX11-xcb -lX11 -lxcb -lGL -lfreetype -lfontconfig -lXi -lXext -lXfixes -lXrender -lglib-2.0 -lSM -lICE -lcups -lxcb-glx)
 
 		foreach(lib icui18n icuuc icudata)
-			target_link_libraries(${TARGET_NAME} /usr/lib/x86_64-linux-gnu/lib${lib}.a)
+			target_link_libraries(${TARGET_NAME} PRIVATE /usr/lib/x86_64-linux-gnu/lib${lib}.a)
 		endforeach()
 
 		set_property(TARGET ${TARGET_NAME} PROPERTY POSITION_INDEPENDENT_CODE ON)

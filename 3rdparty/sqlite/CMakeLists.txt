@@ -1,13 +1,25 @@
+cmake_minimum_required(VERSION 3.5)
 
 add_definitions( -DSQLITE_HAS_CODEC)
+
+set(OPENSSL_USE_STATIC_LIBS TRUE)
+find_package(OpenSSL REQUIRED)
+
+if( OpenSSL_FOUND )
+    message(STATUS "Using OpenSSL ${OPENSSL_VERSION}")
+else()
+    message(FATAL_ERROR "error, OpenSSL not found, please install: 'apt-get install libssl-dev' on Ubuntu")
+endif()
 
 set(SQLITE_SRC
     sqlite3.c
 )
 
 add_library(sqlite STATIC ${SQLITE_SRC})
-target_link_libraries(sqlite ${OPENSSL_LIBCRYPTO})
 
 if(UNIX AND NOT ANDROID)
-    target_link_libraries(sqlite dl pthread)
+    target_link_libraries(sqlite PRIVATE dl pthread)
 endif()
+
+target_link_libraries(sqlite PRIVATE OpenSSL::Crypto)
+

@@ -1,3 +1,16 @@
+cmake_minimum_required(VERSION 3.5)
+
+set(OPENSSL_USE_STATIC_LIBS TRUE)
+find_package(OpenSSL REQUIRED)
+
+find_package(Boost REQUIRED COMPONENTS program_options filesystem system )
+
+if( OpenSSL_FOUND )
+    message(STATUS "Using OpenSSL ${OPENSSL_VERSION}")
+else()
+    message(FATAL_ERROR "error, OpenSSL not found, please install: 'apt-get install libssl-dev' on Ubuntu")
+endif()
+
 set(UTILITY_SRC
     common.cpp
     logger.cpp
@@ -30,7 +43,7 @@ set(IO_SRC
 # ~etc
 )
 
-if (BEAM_USE_AVX)   
+if (BEAM_USE_AVX)
     if (MSVC)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
     elseif(ANDROID)
@@ -38,7 +51,6 @@ if (BEAM_USE_AVX)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse3")
     endif()
 endif()
-
 
 if (MSVC)
     set_source_files_properties(logger.cpp PROPERTIES COMPILE_FLAGS "/wd4996") # 'std::fpos<_Mbstatet>::seekpos': warning STL4019: The member std::fpos::seekpos() is non-Standard
@@ -53,50 +65,47 @@ else()
 endif()
 
 if (UV_INTERNAL)
-    add_dependencies(utility uv_a)
-    target_link_libraries(utility uv_a)
+     target_link_libraries(utility PRIVATE uv_a)
 else()
-    target_link_libraries(utility uv)
+    target_link_libraries(utility PRIVATE uv)
 endif()
-
-target_link_libraries(utility ${OPENSSL_LIBSSL} ${OPENSSL_LIBCRYPTO})
 
 if (UNIX)
-    target_link_libraries(utility dl)
+    target_link_libraries(utility PRIVATE dl)
 endif()
 
-target_link_libraries(utility mnemonic)
 
 if(ANDROID)
     if(ANDROID_ABI STREQUAL "armeabi-v7a")
-        target_link_libraries(utility 
+        target_link_libraries(utility PRIVATE
             $ENV{BOOST_ROOT_ANDROID}/libs/${ANDROID_ABI}/libboost_program_options-clang-mt-a32-1_68.a 
             $ENV{BOOST_ROOT_ANDROID}/libs/${ANDROID_ABI}/libboost_filesystem-clang-mt-a32-1_68.a
             $ENV{BOOST_ROOT_ANDROID}/libs/${ANDROID_ABI}/libboost_system-clang-mt-a32-1_68.a)
     elseif(ANDROID_ABI STREQUAL "x86")
-        target_link_libraries(utility 
+        target_link_libraries(utility PRIVATE
             $ENV{BOOST_ROOT_ANDROID}/libs/${ANDROID_ABI}/libboost_program_options-clang-mt-x32-1_68.a 
             $ENV{BOOST_ROOT_ANDROID}/libs/${ANDROID_ABI}/libboost_filesystem-clang-mt-x32-1_68.a
             $ENV{BOOST_ROOT_ANDROID}/libs/${ANDROID_ABI}/libboost_system-clang-mt-x32-1_68.a)
     elseif(ANDROID_ABI STREQUAL "x86_64")
-        target_link_libraries(utility 
+        target_link_libraries(utility PRIVATE
             $ENV{BOOST_ROOT_ANDROID}/libs/${ANDROID_ABI}/libboost_program_options-clang-mt-x64-1_68.a 
             $ENV{BOOST_ROOT_ANDROID}/libs/${ANDROID_ABI}/libboost_filesystem-clang-mt-x64-1_68.a
             $ENV{BOOST_ROOT_ANDROID}/libs/${ANDROID_ABI}/libboost_system-clang-mt-x64-1_68.a)
     elseif(ANDROID_ABI STREQUAL "arm64-v8a")
-        target_link_libraries(utility 
+        target_link_libraries(utility PRIVATE
             $ENV{BOOST_ROOT_ANDROID}/libs/${ANDROID_ABI}/libboost_program_options-clang-mt-a64-1_68.a 
             $ENV{BOOST_ROOT_ANDROID}/libs/${ANDROID_ABI}/libboost_filesystem-clang-mt-a64-1_68.a
             $ENV{BOOST_ROOT_ANDROID}/libs/${ANDROID_ABI}/libboost_system-clang-mt-a64-1_68.a)
     endif()
 
 else()
-    if (Boost_FOUND)
-        find_package(Boost COMPONENTS program_options filesystem)
-        target_link_libraries(utility Boost::program_options Boost::filesystem)
-    else()
-        target_link_libraries(utility boost_program_options boost_filesystem boost_system)
-    endif()
+    target_link_libraries(utility PRIVATE Boost::program_options Boost::filesystem Boost::system)
 endif()
 
+target_link_libraries(utility
+    PUBLIC 
+        Boost::boost
+        OpenSSL::SSL
+        OpenSSL::Crypto
+)
 add_subdirectory(unittest)

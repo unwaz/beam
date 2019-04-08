@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.5)
+
 set(HTTP_SRC
     http_msg_reader.cpp
     http_msg_creator.cpp
@@ -6,7 +8,6 @@ set(HTTP_SRC
     ${PROJECT_SOURCE_DIR}/3rdparty/picohttpparser/picohttpparser.c)
 
 add_library(http STATIC ${HTTP_SRC})
-add_dependencies(http utility)
-target_link_libraries(http utility)
+target_link_libraries(http PUBLIC utility)
 
 add_subdirectory(unittests)

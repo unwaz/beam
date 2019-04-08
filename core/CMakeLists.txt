@@ -1,3 +1,7 @@
+cmake_minimum_required(VERSION 3.5)
+
+find_package(Boost REQUIRED)
+
 set(CORE_SRC
     uintBig.cpp
     ecc.cpp
@@ -20,12 +24,16 @@ set(CORE_SRC
 
 add_library(core STATIC ${CORE_SRC})
 
-add_dependencies(core p2p pow)
-target_link_libraries(core p2p pow)
+target_link_libraries(core 
+    PUBLIC 
+        pow 
+        p2p
+    PRIVATE
+        pbkdf
+)
 
-target_include_directories(core PUBLIC ${PROJECT_SOURCE_DIR}/3rdparty/secp256k1-zkp/src)
-target_include_directories(core PUBLIC ${PROJECT_SOURCE_DIR}/3rdparty)
-
-include_directories(${PROJECT_SOURCE_DIR}/core)
+target_include_directories(core PRIVATE ${PROJECT_SOURCE_DIR}/3rdparty/secp256k1-zkp/src)
+#target_include_directories(core PRIVATE ${PROJECT_SOURCE_DIR}/3rdparty)
+target_include_directories(core PRIVATE ${PROJECT_SOURCE_DIR}/core)
 
 add_subdirectory(unittest)

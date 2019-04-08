@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.5)
+
 set(TARGET_NAME wallet-jni)
 
 set(SRC
@@ -11,8 +13,7 @@ set(SRC
 )
 
 add_library(${TARGET_NAME} SHARED ${SRC})
-add_dependencies(${TARGET_NAME} wallet utility)
-target_link_libraries(${TARGET_NAME} wallet utility)
+target_link_libraries(${TARGET_NAME} PRIVATE wallet utility)
 
 configure_file("${PROJECT_SOURCE_DIR}/version.h.in" "${CMAKE_CURRENT_BINARY_DIR}/version.h")
 target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
