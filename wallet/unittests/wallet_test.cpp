@@ -127,7 +127,14 @@ namespace
         WALLET_CHECK(senderWalletDB->getTxHistory().empty());
 
         TestNode node;
-        TestWalletRig sender("sender", senderWalletDB, [](auto) { io::Reactor::get_Current().stop(); });
+        TestWalletRig sender("sender", senderWalletDB, [](auto) { io::Reactor::get_Current().stop(); }
+#if defined(BEAM_HW_WALLET)
+            , TestWalletRig::Type::Hardware
+#else
+            , TestWalletRig::Type::Regular
+#endif
+        );
+
         helpers::StopWatch sw;
 
         sw.start();
@@ -1558,6 +1565,49 @@ void TestHWTransaction(IPrivateKeyKeeper& pkk)
     }
 }
 
+#include "mnemonic/mnemonic.h"
+
+void TestHWCommitment()
+{
+    cout << "Test HW commitment" << std::endl;
+
+    Key::IDV kidv;
+    kidv.m_Value = 11100000000;
+    kidv.m_Idx = 1887367845482021531;
+    kidv.m_Type = 1852797549;
+    kidv.m_SubIdx = 16777216;
+
+    Point comm1, comm2;
+    {
+        Scalar::Native secretKey;
+
+        //beam::WordList generatedPhrases = {"budget", "focus", "surface", "plug", "dragon", "elephant", "token", "child", "kitchen", "coast", "lounge", "mean" };
+        beam::WordList generatedPhrases = { "copy", "vendor", "shallow", "raven", "coffee", "appear", "book", "blast", "lock", "exchange", "farm", "glue" };
+        
+        auto buf = beam::decodeMnemonic(generatedPhrases);
+
+        SecString secretSeed;
+        secretSeed.assign(buf.data(), buf.size());
+
+        Key::IKdf::Ptr kdf;
+        ECC::HKdf::Create(kdf, secretSeed.hash().V);
+
+        SwitchCommitment().Create(secretKey, comm1, *MasterKey::get_Child(kdf, kidv), kidv);
+
+        LOG_INFO() << "commitment is " << comm1;
+    }
+
+    {
+        HWWallet hw;
+
+        comm2 = hw.generateKeySync(kidv, true);
+
+        LOG_INFO() << "HW commitment is " << comm2;
+    }
+
+    WALLET_CHECK(comm1 == comm2);
+}
+
 void TestHWWallet()
 {
     cout << "Test HW wallet" << std::endl;
@@ -1674,6 +1724,7 @@ int main()
 
     TestTxExceptionHandling();
 #if defined(BEAM_HW_WALLET)
+    TestHWCommitment();
     TestHWWallet();
 #endif
 
