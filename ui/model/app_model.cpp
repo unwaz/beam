@@ -198,42 +198,18 @@ void AppModel::onFailedToStartNode(beam::wallet::ErrorType errorCode)
 void AppModel::start()
 {
 #if defined(BEAM_HW_WALLET)
+
     {
-        HWWallet hw;
-        auto key = hw.getOwnerKeySync();
-        
-        LOG_INFO() << "Owner key" << key;
-
-        // TODO: password encryption will be removed
-        std::string pass = "1";
-        KeyString ks;
-        ks.SetPassword(Blob(pass.data(), static_cast<uint32_t>(pass.size())));
-
-        ks.m_sRes = key;
-
-        std::shared_ptr<ECC::HKdfPub> pKdf = std::make_shared<ECC::HKdfPub>();
-
-        if (ks.Import(*pKdf))
-        {
-            auto localKdf = m_db->get_OwnerKdf();
-
-            if (localKdf->IsSame(*pKdf))
-            {
-                m_nodeModel.setOwnerKey(pKdf);
-            }
-            else
-            {
-                assert(false);
-            }
-        }
-        else
-        {
-            LOG_ERROR() << "veiw key import failed";            
-        }
+        TrezorKeyKeeper tkk;
+        m_nodeModel.setOwnerKey(tkk.get_OwnerKdf());
     }
+
 #else
+
     m_nodeModel.setOwnerKey(m_db->get_OwnerKdf());
+
 #endif
+
     std::string nodeAddrStr = m_settings.getNodeAddress().toStdString();
     if (m_settings.getRunLocalNode())
     {
@@ -243,6 +219,7 @@ void AppModel::start()
     }
 
     m_wallet = std::make_shared<WalletModel>(m_db, nodeAddrStr, m_walletReactor);
+
 
     if (m_settings.getRunLocalNode())
     {

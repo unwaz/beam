@@ -25,6 +25,7 @@
 
 #if defined(BEAM_HW_WALLET)
 #include "hw_wallet.h"
+#include "core/block_rw.h"
 #endif
 
 namespace beam::wallet
@@ -88,6 +89,8 @@ namespace beam::wallet
         //virtual RangeProofs GenerateRangeProofSync(Height schemeHeigh, const std::vector<Key::IDV>& ids) = 0;
         virtual ECC::Point GenerateNonceSync(size_t slot) = 0;
         virtual ECC::Scalar SignSync(const std::vector<Key::IDV>& inputs, const std::vector<Key::IDV>& outputs, const ECC::Scalar::Native& offset, size_t nonceSlot, const KernelParameters& kernelParamerters, const ECC::Point::Native& publicNonce) = 0;
+
+        virtual Key::IPKdf::Ptr get_OwnerKdf() const = 0;
     };
 
 #if defined(BEAM_HW_WALLET)
@@ -99,6 +102,28 @@ namespace beam::wallet
             : m_latestSlot(0)
         {
 
+        }
+
+        Key::IPKdf::Ptr get_OwnerKdf() const override
+        {
+            auto key = m_hwWallet.getOwnerKeySync();
+
+            // TODO: temporary PIN to decrypt owner key, should be removed
+            std::string pass = "1";
+
+            KeyString ks;
+            ks.SetPassword(Blob(pass.data(), static_cast<uint32_t>(pass.size())));
+
+            ks.m_sRes = key;
+
+            std::shared_ptr<ECC::HKdfPub> pKdf = std::make_shared<ECC::HKdfPub>();
+
+            if (!ks.Import(*pKdf))
+            {
+                LOG_ERROR() << "veiw key import failed";
+            }
+
+            return pKdf;
         }
     private:
         void GeneratePublicKeys(const std::vector<Key::IDV>& ids, bool createCoinKey, Callback<PublicKeys>&& resultCallback, ExceptionCallback&& exceptionCallback) override
@@ -201,6 +226,7 @@ namespace beam::wallet
 
             return m_hwWallet.signTransactionSync(inputs, outputs, txData);
         }
+
     private:
         beam::HWWallet m_hwWallet;
 
@@ -229,6 +255,7 @@ namespace beam::wallet
         ECC::Point GenerateNonceSync(size_t slot) override;
         ECC::Scalar SignSync(const std::vector<Key::IDV>& inputs, const std::vector<Key::IDV>& outputs, const ECC::Scalar::Native& offset, size_t nonceSlot, const KernelParameters& kernelParameters, const ECC::Point::Native& publicNonce) override;
 
+        Key::IPKdf::Ptr get_OwnerKdf() const override;
     private:
 		Key::IKdf::Ptr GetChildKdf(const Key::IDV&) const;
         ECC::Scalar::Native GetNonce(size_t slot);

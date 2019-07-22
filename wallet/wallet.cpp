@@ -157,12 +157,13 @@ namespace beam::wallet
     // Fly client implementation
     void Wallet::get_Kdf(Key::IKdf::Ptr& pKdf)
     {
+        // TODO: add temporary assertion here to eliminate using of master KDF
         pKdf = m_WalletDB->get_MasterKdf();
     }
 
     void Wallet::get_OwnerKdf(Key::IPKdf::Ptr& ownerKdf)
     {
-        ownerKdf = m_WalletDB->get_OwnerKdf();
+        ownerKdf = m_KeyKeeper->get_OwnerKdf();
     }
 
     // Implementation of the FlyClient protocol method
@@ -847,18 +848,19 @@ namespace beam::wallet
         {
             commitmentFunc = [this](const auto& kidv) {return m_KeyKeeper->GeneratePublicKeySync(kidv, true); };
         }
-        else if (auto ownerKdf = m_WalletDB->get_OwnerKdf(); ownerKdf)
-        {
-            commitmentFunc = [ownerKdf](const auto& kidv)
-            {
-                Point::Native pt;
-                SwitchCommitment sw;
+        // TODO: do we need this part, we have KeyKeeper always initialized
+        //else if (auto ownerKdf = m_WalletDB->get_OwnerKdf(); ownerKdf)
+        //{
+        //    commitmentFunc = [ownerKdf](const auto& kidv)
+        //    {
+        //        Point::Native pt;
+        //        SwitchCommitment sw;
 
-                sw.Recover(pt, *ownerKdf, kidv);
-                Point commitment = pt;
-                return commitment;
-            };
-        }
+        //        sw.Recover(pt, *ownerKdf, kidv);
+        //        Point commitment = pt;
+        //        return commitment;
+        //    };
+        //}
 
 		for (size_t i = 0; i < v.size(); i++)
 		{

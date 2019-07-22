@@ -1317,6 +1317,10 @@ namespace beam::wallet
 
     beam::Key::IPKdf::Ptr WalletDB::get_OwnerKdf() const
     {
+        // TODO: temporary assert
+#if defined(BEAM_HW_WALLET)
+        assert(!"Don't call this if you use HW wallet!");
+#endif
         return m_OwnerKdf;
     }
 

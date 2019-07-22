@@ -233,6 +233,11 @@ namespace beam::wallet
         return Scalar(partialSignature);
     }
 
+    Key::IPKdf::Ptr LocalPrivateKeyKeeper::get_OwnerKdf() const
+    {
+        return m_WalletDB->get_OwnerKdf();
+    }
+
     void LocalPrivateKeyKeeper::LoadNonceSeeds()
     {
         try
