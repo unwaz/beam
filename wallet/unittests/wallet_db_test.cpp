@@ -636,8 +636,8 @@ void TestExportImportTx()
     WalletAddress wa2;
     wa2.m_OwnID = (*walletDB).AllocateKidRange(1);
     wa2.m_walletID = storage::generateWalletIDFromIndex(*walletDB, wa2.m_OwnID);
-    TxID txId2 = { {4, 5, 6, 7, 65} };
-    TxDescription tr2(txId2);
+    TxID txID2 = { {7, 8, 9, 13} };
+    TxDescription tr2(txID2);
     tr2.m_amount = 71;
     tr2.m_minHeight = 285;
     tr2.m_createTime = 4628;
