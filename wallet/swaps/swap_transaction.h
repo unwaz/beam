@@ -34,7 +34,7 @@ namespace beam::wallet
     {
     public:
         using Ptr = std::shared_ptr<ISecondSideFactory>;
-
+        virtual ~ISecondSideFactory(){}
         virtual SecondSide::Ptr CreateSecondSide(BaseTransaction& tx, bool isBeamSide) = 0;
     };
 
