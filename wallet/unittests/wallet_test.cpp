@@ -64,11 +64,11 @@ namespace
         io::Reactor::Ptr mainReactor{ io::Reactor::create() };
         io::Reactor::Scope scope(*mainReactor);
 
-        WalletAddress wa = storage::createAddress(*receiverWalletDB);
+        WalletAddress wa = storage::createAddress(*receiverWalletDB, receiverWalletDB->get_MasterKdf());
         receiverWalletDB->saveAddress(wa);
         WalletID receiver_id = wa.m_walletID;
 
-        wa = storage::createAddress(*senderWalletDB);
+        wa = storage::createAddress(*senderWalletDB, senderWalletDB->get_MasterKdf());
         senderWalletDB->saveAddress(wa);
         WalletID sender_id = wa.m_walletID;
 

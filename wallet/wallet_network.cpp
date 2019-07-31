@@ -76,7 +76,7 @@ namespace beam::wallet {
                 break; // as well
 
 
-            if (!m_WalletDB->get_MasterKdf())
+            if (!m_Wallet.getKeyKeeper()->get_SbbsKdf())
             {
                 // public wallet
                 m_WalletDB->saveIncomingWalletMessage(channel, msg);
@@ -129,9 +129,10 @@ namespace beam::wallet {
             pAddr->m_ExpirationTime = address.getExpirationTime();
             pAddr->m_Wid.m_OwnID = address.m_OwnID;
 
-            if (m_WalletDB->get_MasterKdf())
+            // TODO: get_SBBS_KDF should be here?
+            if (m_Wallet.getKeyKeeper()->get_SbbsKdf())
             {
-                m_WalletDB->get_MasterKdf()->DeriveKey(pAddr->m_sk, Key::ID(address.m_OwnID, Key::Type::Bbs));
+                m_Wallet.getKeyKeeper()->get_SbbsKdf()->DeriveKey(pAddr->m_sk, Key::ID(address.m_OwnID, Key::Type::Bbs));
 
                 proto::Sk2Pk(pAddr->m_Pk, pAddr->m_sk); // needed to "normalize" the sk, and calculate the channel
             }
@@ -204,7 +205,7 @@ namespace beam::wallet {
         ECC::GenRandom(hvRandom.V);
 
         ECC::Scalar::Native nonce;
-        m_WalletDB->get_MasterKdf()->DeriveKey(nonce, hvRandom.V);
+        m_Wallet.getKeyKeeper()->get_SbbsKdf()->DeriveKey(nonce, hvRandom.V);
 
         ByteBuffer encryptedMessage;
         if (proto::Bbs::Encrypt(encryptedMessage, peerID.m_Pk, nonce, sb.first, static_cast<uint32_t>(sb.second)))

@@ -157,13 +157,14 @@ namespace beam::wallet
     // Fly client implementation
     void Wallet::get_Kdf(Key::IKdf::Ptr& pKdf)
     {
-        // TODO: add temporary assertion here to eliminate using of master KDF
+#if !defined(BEAM_HW_WALLET)
         pKdf = m_WalletDB->get_MasterKdf();
+#endif
     }
 
     void Wallet::get_OwnerKdf(Key::IPKdf::Ptr& ownerKdf)
     {
-        ownerKdf = m_KeyKeeper->get_OwnerKdf();
+        ownerKdf = m_WalletDB->get_OwnerKdf();
     }
 
     // Implementation of the FlyClient protocol method

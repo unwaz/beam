@@ -1006,18 +1006,18 @@ namespace beam::wallet
                 walletDB->setPrivateVarRaw(WalletSeed, &secretKey.V, sizeof(secretKey.V));
 
                 // store owner key (public)
-                {
-                    Key::IKdf::Ptr pKey = walletDB->get_MasterKdf();
-                    const ECC::HKdf& kdf = static_cast<ECC::HKdf&>(*pKey);
+                //{
+                //    Key::IKdf::Ptr pKey = walletDB->get_MasterKdf();
+                //    const ECC::HKdf& kdf = static_cast<ECC::HKdf&>(*pKey);
 
-                    auto publicKdf = make_shared<ECC::HKdfPub>();
-                    publicKdf->GenerateFrom(kdf);
-                    ECC::NoLeak<ECC::HKdfPub::Packed> packedOwnerKey;
-                    publicKdf->Export(packedOwnerKey.V);
-
-                    storage::setVar(*walletDB, OwnerKey, packedOwnerKey.V);
-                    walletDB->m_OwnerKdf = publicKdf;
-                }
+                //    auto publicKdf = make_shared<ECC::HKdfPub>();
+                //    publicKdf->GenerateFrom(kdf);
+                //    ECC::NoLeak<ECC::HKdfPub::Packed> packedOwnerKey;
+                //    publicKdf->Export(packedOwnerKey.V);
+                //     
+                //    storage::setVar(*walletDB, OwnerKey, packedOwnerKey.V);
+                //    walletDB->m_OwnerKdf = publicKdf;
+                //}
 
                 storage::setVar(*walletDB, Version, DbVersion);
             }
@@ -1246,7 +1246,10 @@ namespace beam::wallet
                             }
                             walletDB->m_OwnerKdf = publicKdf;
                         }
-
+                        else
+                        {
+                            assert(!"Owner key should be stored in DB if you use HW wallet!");
+                        }
                     }
                 }
 
@@ -1307,20 +1310,28 @@ namespace beam::wallet
 
     Key::IKdf::Ptr WalletDB::get_MasterKdf() const
     {
+        // TODO: Don't call this if you use HW wallet!
+#if defined(BEAM_HW_WALLET)
+        assert(false);
+        return nullptr;
+#else
         return m_pKdf;
+#endif
     }
 
 	Key::IKdf::Ptr IWalletDB::get_ChildKdf(const Key::IDV& kidv) const
 	{
+#if defined(BEAM_HW_WALLET)
+        assert(!"Don't call this if you use HW wallet!");
+#endif
 		return MasterKey::get_Child(get_MasterKdf(), kidv);
 	}
 
     beam::Key::IPKdf::Ptr WalletDB::get_OwnerKdf() const
     {
-        // TODO: temporary assert
-#if defined(BEAM_HW_WALLET)
-        assert(!"Don't call this if you use HW wallet!");
-#endif
+//#if defined(BEAM_HW_WALLET)
+//        assert(!"Don't call this if you use HW wallet!");
+//#endif
         return m_OwnerKdf;
     }
 
@@ -2721,26 +2732,27 @@ namespace beam::wallet
             });
         }
 
-        WalletAddress createAddress(IWalletDB& walletDB)
+        WalletAddress createAddress(IWalletDB& walletDB, Key::IKdf::Ptr sbbsKdf)
         {
             WalletAddress newAddress;
             newAddress.m_createTime = beam::getTimestamp();
             newAddress.m_OwnID = walletDB.AllocateKidRange(1);
-            newAddress.m_walletID = generateWalletIDFromIndex(walletDB, newAddress.m_OwnID);
+            newAddress.m_walletID = generateWalletIDFromIndex(sbbsKdf, newAddress.m_OwnID);
 
             return newAddress;
         }
 
-        WalletID generateWalletIDFromIndex(IWalletDB& walletDB, uint64_t ownID)
+        WalletID generateWalletIDFromIndex(Key::IKdf::Ptr sbbsKdf, uint64_t ownID)
         {
-            if (!walletDB.get_MasterKdf())
+            if (!sbbsKdf)
             {
                 throw CannotGenerateSecretException();
             }
             WalletID walletID(Zero);
 
             ECC::Scalar::Native sk;
-            walletDB.get_MasterKdf()->DeriveKey(sk, Key::ID(ownID, Key::Type::Bbs));
+
+            sbbsKdf->DeriveKey(sk, Key::ID(ownID, Key::Type::Bbs));
 
             proto::Sk2Pk(walletID.m_Pk, sk);
 
@@ -2811,7 +2823,7 @@ namespace beam::wallet
             const string OwnAddressesName = "OwnAddresses";
             const string TransactionParametersName = "TransactionParameters";
 
-            bool ImportAddressesFromJson(IWalletDB& db, const json& obj)
+            bool ImportAddressesFromJson(IWalletDB& db, Key::IKdf::Ptr sbbsKdf, const json& obj)
             {
                 if (obj.find(OwnAddressesName) == obj.end())
                 {
@@ -2825,7 +2837,7 @@ namespace beam::wallet
                     if (address.m_walletID.FromHex(jsonAddress["WalletID"]))
                     {
                         address.m_OwnID = jsonAddress["Index"];
-                        if (address.m_walletID == generateWalletIDFromIndex(db, address.m_OwnID))
+                        if (address.m_walletID == generateWalletIDFromIndex(sbbsKdf, address.m_OwnID))
                         {
                             //{ "SubIndex", 0 },
                             address.m_label = jsonAddress["Label"];
@@ -2843,7 +2855,7 @@ namespace beam::wallet
                 return true;
             }
 
-            bool ImportTransactionsFromJson(IWalletDB& db, const json& obj)
+            bool ImportTransactionsFromJson(IWalletDB& db, Key::IKdf::Ptr sbbsKdf, const json& obj)
             {
                 if (obj.find(TransactionParametersName) == obj.end())
                 {
@@ -2885,7 +2897,7 @@ namespace beam::wallet
                     }
 
                     auto waddr = db.getAddress(wid);
-                    if (waddr && (waddr->m_OwnID == 0 || wid != generateWalletIDFromIndex(db, waddr->m_OwnID)))
+                    if (waddr && (waddr->m_OwnID == 0 || wid != generateWalletIDFromIndex(sbbsKdf, waddr->m_OwnID)))
                     {
                         LOG_ERROR() << "Transaction " << txPair.first << " was not imported. Invalid address parameter";
                         continue;
@@ -2893,7 +2905,7 @@ namespace beam::wallet
 
                     auto addressIt = paramsMap.find(TxParameterID::MyAddressID);
                     if (addressIt != paramsMap.end() && (!fromByteBuffer(addressIt->second.m_value, myAddrId) ||
-                        wid != generateWalletIDFromIndex(db, myAddrId)))
+                        wid != generateWalletIDFromIndex(sbbsKdf, myAddrId)))
                     {
                         LOG_ERROR() << "Transaction " << txPair.first << " was not imported. Invalid MyAddressID parameter";
                         continue;
@@ -2969,12 +2981,12 @@ namespace beam::wallet
             return res.dump();
         }
 
-        bool ImportDataFromJson(IWalletDB& db, const char* data, size_t size)
+        bool ImportDataFromJson(IWalletDB& db, Key::IKdf::Ptr sbbsKdf, const char* data, size_t size)
         {
             try
             {
                 json obj = json::parse(data, data + size);
-                return ImportAddressesFromJson(db, obj) && ImportTransactionsFromJson(db, obj);
+                return ImportAddressesFromJson(db, sbbsKdf, obj) && ImportTransactionsFromJson(db, sbbsKdf, obj);
             }
             catch (const nlohmann::detail::exception& e)
             {

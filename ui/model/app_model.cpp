@@ -70,10 +70,11 @@ bool AppModel::createWallet(const SecString& seed, const SecString& pass)
     m_db = WalletDB::init(dbFilePath, pass, seed.hash(), m_walletReactor);
     if (!m_db) return false;
 
-    // generate default address
-    WalletAddress address = storage::createAddress(*m_db);
-    address.m_label = "default";
-    m_db->saveAddress(address);
+    // !TODO: uncomment this, and pass KeyKeeper to createAddress()
+    //// generate default address
+    //WalletAddress address = storage::createAddress(*m_db);
+    //address.m_label = "default";
+    //m_db->saveAddress(address);
 
     onWalledOpened(pass);
     return true;
@@ -197,18 +198,7 @@ void AppModel::onFailedToStartNode(beam::wallet::ErrorType errorCode)
 
 void AppModel::start()
 {
-#if defined(BEAM_HW_WALLET)
-
-    {
-        TrezorKeyKeeper tkk;
-        m_nodeModel.setOwnerKey(tkk.get_OwnerKdf());
-    }
-
-#else
-
     m_nodeModel.setOwnerKey(m_db->get_OwnerKdf());
-
-#endif
 
     std::string nodeAddrStr = m_settings.getNodeAddress().toStdString();
     if (m_settings.getRunLocalNode())

@@ -339,6 +339,8 @@ namespace beam::wallet
 
     std::string WalletClient::exportOwnerKey(const beam::SecString& pass) const
     {
+        // TODO: pls use KeyKeeper interface here
+        assert(false);
         Key::IKdf::Ptr pKey = m_walletDB->get_MasterKdf();
         const ECC::HKdf& kdf = static_cast<ECC::HKdf&>(*pKey);
 
@@ -398,15 +400,15 @@ namespace beam::wallet
     {
         try
         {
-            WalletAddress senderAddress = storage::createAddress(*m_walletDB);
-            saveAddress(senderAddress, true); // should update the wallet_network
-
-            ByteBuffer message(comment.begin(), comment.end());
-
             assert(!m_wallet.expired());
             auto s = m_wallet.lock();
             if (s)
             {
+                WalletAddress senderAddress = storage::createAddress(*m_walletDB, s->getKeyKeeper()->get_SbbsKdf());
+                saveAddress(senderAddress, true); // should update the wallet_network
+
+                ByteBuffer message(comment.begin(), comment.end());
+
                 s->transfer_money(senderAddress.m_walletID, receiver, move(amount), move(fee), true, kDefaultTxLifetime, kDefaultTxResponseTime, move(message), true);
             }
 
@@ -547,9 +549,15 @@ namespace beam::wallet
     {
         try
         {
-            WalletAddress address = storage::createAddress(*m_walletDB);
+            assert(!m_wallet.expired());
+            auto s = m_wallet.lock();
+            if (s)
+            {
+                WalletAddress address = storage::createAddress(*m_walletDB, s->getKeyKeeper()->get_SbbsKdf());
 
-            onGeneratedNewAddress(address);
+                onGeneratedNewAddress(address);
+            }
+
         }
         catch (const CannotGenerateSecretException&)
         {

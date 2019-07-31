@@ -91,6 +91,8 @@ namespace beam::wallet
         virtual ECC::Scalar SignSync(const std::vector<Key::IDV>& inputs, const std::vector<Key::IDV>& outputs, const ECC::Scalar::Native& offset, size_t nonceSlot, const KernelParameters& kernelParamerters, const ECC::Point::Native& publicNonce) = 0;
 
         virtual Key::IPKdf::Ptr get_OwnerKdf() const = 0;
+
+        virtual Key::IKdf::Ptr get_SbbsKdf() const = 0;
     };
 
 #if defined(BEAM_HW_WALLET)
@@ -125,6 +127,21 @@ namespace beam::wallet
 
             return pKdf;
         }
+
+        Key::IKdf::Ptr get_SbbsKdf() const override
+        {
+            // !TODO: temporary solution to init SBBS KDF with commitment
+            Key::IDV kidv{ 0, 0, Key::Type::Regular };
+            auto key = m_hwWallet.generateKeySync(kidv, true);
+
+            Key::IKdf::Ptr sbbsKdf;
+
+            ECC::HKdf::Create(sbbsKdf, key.m_X);
+
+            return sbbsKdf;
+        }
+
+
     private:
         void GeneratePublicKeys(const std::vector<Key::IDV>& ids, bool createCoinKey, Callback<PublicKeys>&& resultCallback, ExceptionCallback&& exceptionCallback) override
         {
@@ -256,6 +273,8 @@ namespace beam::wallet
         ECC::Scalar SignSync(const std::vector<Key::IDV>& inputs, const std::vector<Key::IDV>& outputs, const ECC::Scalar::Native& offset, size_t nonceSlot, const KernelParameters& kernelParameters, const ECC::Point::Native& publicNonce) override;
 
         Key::IPKdf::Ptr get_OwnerKdf() const override;
+
+        Key::IKdf::Ptr get_SbbsKdf() const override;
     private:
 		Key::IKdf::Ptr GetChildKdf(const Key::IDV&) const;
         ECC::Scalar::Native GetNonce(size_t slot);

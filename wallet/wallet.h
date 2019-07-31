@@ -71,6 +71,8 @@ namespace beam::wallet
         // Callback for receiving notifications on SBBS messages
         virtual void OnWalletMessage(const WalletID& peerID, SetTxParameter&&) = 0;
 
+        virtual IPrivateKeyKeeper::Ptr getKeyKeeper() const = 0;
+
     };
 
     // Interface for sending wallet to wallet messages
@@ -126,7 +128,7 @@ namespace beam::wallet
         void ProcessTransaction(wallet::BaseTransaction::Ptr tx);
         void RegisterTransactionType(wallet::TxType type, wallet::BaseTransaction::Creator creator);
 
-        IPrivateKeyKeeper::Ptr getKeyKeeper() const { return m_KeyKeeper; }
+        IPrivateKeyKeeper::Ptr getKeyKeeper() const override { return m_KeyKeeper; }
 
     private:
         void RefreshTransactions();

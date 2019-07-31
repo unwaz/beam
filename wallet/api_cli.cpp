@@ -299,7 +299,7 @@ namespace
             {
                 LOG_DEBUG() << "CreateAddress(id = " << id << ")";
 
-                WalletAddress address = storage::createAddress(*_walletDB);
+                WalletAddress address = storage::createAddress(*_walletDB, _walletDB->get_MasterKdf());
                 FillAddressData(data, address);
 
                 _walletDB->saveAddress(address);
@@ -396,7 +396,7 @@ namespace
                     }
                     else
                     {
-                        WalletAddress senderAddress = storage::createAddress(*_walletDB);
+                        WalletAddress senderAddress = storage::createAddress(*_walletDB, _walletDB->get_MasterKdf());
                         _walletDB->saveAddress(senderAddress);
 
                         from = senderAddress.m_walletID;     
@@ -471,7 +471,7 @@ namespace
                 LOG_DEBUG() << "], fee = " << data.fee;
                 try
                 {
-                     WalletAddress senderAddress = storage::createAddress(*_walletDB);
+                     WalletAddress senderAddress = storage::createAddress(*_walletDB, _walletDB->get_MasterKdf());
                     _walletDB->saveAddress(senderAddress);
 
                     if (data.fee < MinimumFee)

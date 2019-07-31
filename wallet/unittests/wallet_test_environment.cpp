@@ -353,10 +353,11 @@ struct TestWalletRig
         : m_WalletDB{ walletDB }
         , m_Wallet{ m_WalletDB, move(action),( type == Type::ColdWallet) ? []() {io::Reactor::get_Current().stop(); } : Wallet::UpdateCompletedAction(), type == Type::Hardware }
     {
-          m_KeyKeeper = m_Wallet.getKeyKeeper();
+        m_KeyKeeper = m_Wallet.getKeyKeeper();
+
         if (m_WalletDB->get_MasterKdf()) // can create secrets
         {
-            WalletAddress wa = storage::createAddress(*m_WalletDB);
+            WalletAddress wa = storage::createAddress(*m_WalletDB, m_WalletDB->get_MasterKdf());
             m_WalletDB->saveAddress(wa);
             m_WalletID = wa.m_walletID;
         }

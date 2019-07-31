@@ -493,7 +493,7 @@ namespace
         const std::string& label,
         WalletAddress::ExpirationStatus expirationStatus = WalletAddress::ExpirationStatus::OneDay)
     {
-        WalletAddress address = storage::createAddress(*walletDB);
+        WalletAddress address = storage::createAddress(*walletDB, walletDB->get_MasterKdf());
 
         address.setExpiration(expirationStatus);
         address.m_label = label;
@@ -903,7 +903,7 @@ namespace
             return -1;
         }
         const char* p = (char*)(&buffer[0]);
-        return storage::ImportDataFromJson(*walletDB, p, buffer.size()) ? 0 : -1;
+        return storage::ImportDataFromJson(*walletDB, walletDB->get_MasterKdf(), p, buffer.size()) ? 0 : -1;
     }
 
     CoinIDList GetPreselectedCoinIDs(const po::variables_map& vm)
