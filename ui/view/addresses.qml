@@ -28,8 +28,9 @@ ColumnLayout {
         Layout.minimumHeight: 40
         Layout.maximumHeight: 40
         font.pixelSize: 36
-        color: Style.white
-        text: qsTr("Addresses")
+        color: Style.content_main
+        //% "Addresses"
+        text: qsTrId("addresses-tittle")
     }
 
     StatusBar {
@@ -42,6 +43,149 @@ ColumnLayout {
         property bool isOwn
     }
 
+    Dialog {
+        id: showQR
+        property var addressItem: null
+        modal: true
+        width: 462
+        height: 541
+
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+        visible: false
+        
+        background: Rectangle {
+            radius: 10
+            color: Style.background_second
+            anchors.fill: parent
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 30
+            spacing: 0
+
+            Item {
+                width: parent.width
+                height: 29
+
+                SFText {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    //: show QR dialog title
+                    //% "QR code"
+                    text: qsTrId("show-qr-title")
+                    color: Style.content_main
+                    font.pixelSize: 24
+                    font.styleName: "Bold"; font.weight: Font.Bold
+                }
+                Image {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    fillMode: Image.Pad     
+                    source: "qrc:/assets/icon-cancel-16.svg"
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            showQR.close();
+                        }
+                    }
+                }
+            }
+
+            Item {
+                Layout.fillHeight: true
+                Layout.minimumHeight: 40
+                Layout.maximumHeight: 40
+            }
+
+            Image {
+                    Layout.alignment: Qt.AlignHCenter
+                    fillMode: Image.Pad
+                    source: showQR.addressItem ? viewModel.generateQR(showQR.addressItem.address, 164, 164) : ""
+            }
+            Item {
+                Layout.fillHeight: true
+                Layout.minimumHeight: 40
+                Layout.maximumHeight: 40
+            }
+
+            SFText {
+                Layout.alignment: Qt.AlignHCenter
+                //: show qr dialog address label
+                //% "Your address"
+                text: qsTrId("show-qr-tx-token-label") + ":"
+                color: Style.content_main
+                font.pixelSize: 14
+                font.styleName: "Bold"; font.weight: Font.Bold
+            }
+
+            Item {
+                Layout.fillHeight: true
+                Layout.minimumHeight: 10
+                Layout.maximumHeight: 10
+            }
+
+            Item {
+                Layout.fillHeight: true
+                Layout.minimumHeight: 45
+                Layout.maximumHeight: 45
+            
+                SFLabel {
+                    height: 48
+                    width: 392
+                    horizontalAlignment: Text.AlignHCenter
+                    text: showQR.addressItem ? showQR.addressItem.address : ""
+                    color: Style.content_secondary
+                    font.pixelSize: 14
+                    wrapMode: Text.Wrap
+                    copyMenuEnabled: true
+                    onCopyText: BeamGlobals.copyToClipboard(text)
+                }
+            }
+
+            Item {
+                Layout.fillHeight: true
+                Layout.minimumHeight: 20
+                Layout.maximumHeight: 20
+            }
+
+            SFText {
+                // width: 400
+                Layout.preferredWidth: 400
+                Layout.minimumHeight: 32
+                Layout.maximumHeight: 48
+                horizontalAlignment: Text.AlignHCenter
+                //: show QR dialog message, how to use this QR
+                //% "Scan this QR code or send this address to the sender over secure channel"
+                text: qsTrId("show-qr-message")
+                color: Style.content_main
+                wrapMode: Text.WordWrap
+                font.pixelSize: 14
+            }
+
+            Item {
+                Layout.fillHeight: true
+                Layout.minimumHeight: 25
+                Layout.maximumHeight: 25
+            }
+
+            Row {
+                Layout.alignment: Qt.AlignHCenter
+                CustomButton {
+                    height: 38
+                    //% "Close"
+                    text: qsTrId("general-close")
+                    Layout.alignment: Qt.AlignHCenter
+                    icon.source: "qrc:/assets/icon-cancel-16.svg"
+                    onClicked: showQR.close()
+                }
+            }
+        }
+    }
+
     RowLayout {
         Layout.fillWidth: true
         Layout.minimumHeight: 40
@@ -52,20 +196,26 @@ ColumnLayout {
         TxFilter{
             id: activeAddressesFilter
             Layout.leftMargin: 20
-            label: qsTr("MY ACTIVE ADDRESSES")
+            //% "My active addresses"
+            label: qsTrId("addresses-tab-active")
             onClicked: addressRoot.state = "active"
+            capitalization: Font.AllUppercase
         }
 
         TxFilter{
             id: expiredAddressesFilter
-            label: qsTr("MY EXPIRED ADDRESSES")
+            //% "My expired addresses"
+            label: qsTrId("addresses-tab-expired")
             onClicked: addressRoot.state = "expired"
+            capitalization: Font.AllUppercase
         }
 
         TxFilter{
             id: contactsFilter
-            label: qsTr("CONTACTS")
+            //% "Contacts"
+            label: qsTrId("addresses-tab-contacts")
             onClicked: addressRoot.state = "contacts"
+            capitalization: Font.AllUppercase
         }
 
         Item {
@@ -85,6 +235,7 @@ ColumnLayout {
             visible: false
 
             editDialog: editActiveAddress
+            showQRDialog: showQR
 
             sortIndicatorVisible: true
             sortIndicatorColumn: 4
@@ -110,6 +261,7 @@ ColumnLayout {
             parentModel: viewModel
 
             editDialog: editExpiredAddress
+            showQRDialog: showQR
             isExpired: true
 
             sortIndicatorVisible: true
@@ -143,14 +295,16 @@ ColumnLayout {
 
             TableViewColumn {
                 role: viewModel.nameRole
-                title: qsTr("Comment")
+                //% "Comment"
+                title: qsTrId("general-comment")
                 width: 280 * contactsView.resizableWidth / 740
                 movable: false
             }
 
             TableViewColumn {
                 role: viewModel.addressRole
-                title: qsTr("Contact")
+                //% "Contact"
+                title: qsTrId("general-contact")
                 width: 170 * contactsView.resizableWidth / 740
                 movable: false
                 delegate: Item {
@@ -167,9 +321,9 @@ ColumnLayout {
                             elide: Text.ElideMiddle
                             anchors.verticalCenter: parent.verticalCenter
                             text: styleData.value
-                            color: Style.white
+                            color: Style.content_main
                             copyMenuEnabled: true
-                            onCopyText: viewModel.copyToClipboard(text)
+                            onCopyText: BeamGlobals.copyToClipboard(text)
                         }
                     }
                 }
@@ -177,7 +331,8 @@ ColumnLayout {
 
             TableViewColumn {
                 role: viewModel.categoryRole
-                title: qsTr("Category")
+                //% "Category"
+                title: qsTrId("general-category")
                 width: 290 * contactsView.resizableWidth / 740
                 movable: false
             }
@@ -202,8 +357,19 @@ ColumnLayout {
                 Rectangle {
                     anchors.fill: parent
 
-                    color: styleData.selected ? Style.bright_sky_blue : Style.light_navy
+                    color: styleData.selected ? Style.row_selected : Style.background_row_even
                     visible: styleData.selected ? true : styleData.alternate
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.RightButton
+                    onClicked: {
+                        if (mouse.button == Qt.RightButton && styleData.row != undefined)
+                        {
+                            contextMenu.address = contactsView.model[styleData.row].address;
+                            contextMenu.popup();
+                        }
+                    }
                 }
             }
 
@@ -226,7 +392,8 @@ ColumnLayout {
                             spacing: 10
                             CustomToolButton {
                                 icon.source: "qrc:/assets/icon-actions.svg"
-                                ToolTip.text: qsTr("Actions")
+                                //% "Actions"
+                                ToolTip.text: qsTrId("general-actions")
                                 onClicked: {
                                     contextMenu.address = contactsView.model[styleData.row].address;
                                     contextMenu.popup();
@@ -243,7 +410,8 @@ ColumnLayout {
                 dim: false
                 property string address
                 Action {
-                    text: qsTr("delete contact")
+                    //% "Delete contact"
+                    text: qsTrId("address-table-cm-delete-contact")
                     icon.source: "qrc:/assets/icon-delete.svg"
                     onTriggered: {
                         viewModel.deleteAddress(contextMenu.address);
@@ -303,5 +471,4 @@ ColumnLayout {
             }
         }
     ]
-
 }

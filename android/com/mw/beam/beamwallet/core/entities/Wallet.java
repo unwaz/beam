@@ -16,6 +16,7 @@ package com.mw.beam.beamwallet.core.entities;
 
 import java.util.*; 
 import com.mw.beam.beamwallet.core.entities.dto.WalletAddressDTO;
+import com.mw.beam.beamwallet.core.entities.dto.PaymentInfoDTO;
 
 public class Wallet
 {
@@ -25,17 +26,26 @@ public class Wallet
     public native void getWalletStatus();
     public native void getUtxosStatus();
     public native void syncWithNode();
-    public native void sendMoney(String receiver, String comment, long amount, long fee);
+    public native void sendMoney(String sender, String receiver, String comment, long amount, long fee);
     public native void calcChange(long amount);
     public native void getAddresses(boolean own);
     public native void generateNewAddress();
     public native void saveAddress(WalletAddressDTO address, boolean own);
-    public native void saveAddressChanges(String addr, String name, boolean isNever, boolean makeActive, boolean makeExpired);
+    public native void updateAddress(String addr, String name, int addressExpirationEnum);
     public native void cancelTx(String id);
     public native void deleteTx(String id);
     public native void deleteAddress(String walletID);
     public native void changeWalletPassword(String password);
     public native boolean checkWalletPassword(String password);
+    public native void getPaymentInfo(String txID);
+    public native PaymentInfoDTO verifyPaymentInfo(String paymentInfo);
+    public native void getCoinsByTx(String txID);
+    public native void changeNodeAddress(String address);
+    public native String exportOwnerKey(String pass);
+    public native void importRecovery(String path);
+
+    // deprecated
+    public native void saveAddressChanges(String addr, String name, boolean isNever, boolean makeActive, boolean makeExpired);
 
     // not implemented
     public native void changeCurrentWalletIDs(); //const beam::WalletID& senderID, const beam::WalletID& receiverID);

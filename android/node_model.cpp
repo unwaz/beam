@@ -22,6 +22,8 @@
 #include "utility/logger.h"
 #include "wallet/default_peers.h"
 
+#include <jni.h>
+#include "common.h"
 
 using namespace beam;
 using namespace beam::io;
@@ -60,22 +62,71 @@ bool NodeModel::isNodeRunning() const
 
 void NodeModel::onSyncProgressUpdated(int done, int total)
 {
+    LOG_DEBUG() << "onNodeSyncProgressUpdated(" << done << ", " << total << ")";
+
+    JNIEnv* env = Android_JNI_getEnv();
+
+    jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onNodeSyncProgressUpdated", "(II)V");
+
+    env->CallStaticVoidMethod(WalletListenerClass, callback, done, total);
 }
 
 void NodeModel::onStartedNode()
 {
+    JNIEnv* env = Android_JNI_getEnv();
+
+    jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onStartedNode", "()V");
+
+    env->CallStaticVoidMethod(WalletListenerClass, callback);
 }
 
 void NodeModel::onStoppedNode()
 {
+    JNIEnv* env = Android_JNI_getEnv();
+
+    jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onStoppedNode", "()V");
+
+    env->CallStaticVoidMethod(WalletListenerClass, callback);
 }
 
-void NodeModel::onFailedToStartNode()
+void NodeModel::onNodeCreated()
+{
+    JNIEnv* env = Android_JNI_getEnv();
+
+    jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onNodeCreated", "()V");
+
+    env->CallStaticVoidMethod(WalletListenerClass, callback);
+}
+
+void NodeModel::onNodeDestroyed()
+{
+    JNIEnv* env = Android_JNI_getEnv();
+
+    jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onNodeDestroyed", "()V");
+
+    env->CallStaticVoidMethod(WalletListenerClass, callback);
+}
+
+// void NodeModel::onFailedToStartNode()
+// {
+//     JNIEnv* env = Android_JNI_getEnv();
+
+//     jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onFailedToStartNode", "()V");
+
+//     env->CallStaticVoidMethod(WalletListenerClass, callback);
+// }
+
+void NodeModel::onSyncError(beam::Node::IObserver::Error error)
 {
 }
 
-void NodeModel::onFailedToStartNode(io::ErrorCode errorCode)
+void NodeModel::onFailedToStartNode(io::ErrorCode /*errorCode*/)
 {
+    JNIEnv* env = Android_JNI_getEnv();
+
+    jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onFailedToStartNode", "()V");
+
+    env->CallStaticVoidMethod(WalletListenerClass, callback);
 }
 
 uint16_t NodeModel::getLocalNodePort()
@@ -97,4 +148,13 @@ std::string NodeModel::getTempDir()
 std::vector<std::string> NodeModel::getLocalNodePeers()
 {
     return getDefaultPeers();
+}
+
+void NodeModel::onNodeThreadFinished()
+{
+    JNIEnv* env = Android_JNI_getEnv();
+
+    jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onNodeThreadFinished", "()V");
+
+    env->CallStaticVoidMethod(WalletListenerClass, callback);
 }

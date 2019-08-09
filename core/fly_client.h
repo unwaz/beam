@@ -27,8 +27,9 @@ namespace proto {
 #define REQUEST_TYPES_All(macro) \
 		macro(Utxo,			GetProofUtxo,		ProofUtxo) \
 		macro(Kernel,		GetProofKernel,		ProofKernel) \
+		macro(Kernel2,		GetProofKernel2,	ProofKernel2) \
 		macro(UtxoEvents,	GetUtxoEvents,		UtxoEvents) \
-		macro(Transaction,	NewTransaction,		Boolean) \
+		macro(Transaction,	NewTransaction,		Status) \
 		macro(BbsMsg,		BbsMsg,				Pong)
 
 		class Request
@@ -77,7 +78,8 @@ namespace proto {
 		virtual void OnNewTip() {} // tip already added
 		virtual void OnTipUnchanged() {} // we have connected to node, but the tip has not changed
 		virtual void OnRolledBack() {} // reversed states are already removed
-		virtual void get_Kdf(Key::IKdf::Ptr&) {}
+		virtual void get_Kdf(Key::IKdf::Ptr&) {} // get the master kdf. Optional
+        virtual void get_OwnerKdf(Key::IPKdf::Ptr&) {} // get the owner kdf. Optional
 		virtual Block::SystemState::IHistory& get_History() = 0;
 		virtual void OnOwnedNode(const PeerID&, bool bUp) {}
 
@@ -128,6 +130,7 @@ namespace proto {
 				std::vector<io::Address> m_vNodes;
 				uint32_t m_PollPeriod_ms = 0; // set to 0 to keep connection. Anyway poll period would be no less than the expected rate of blocks
 				uint32_t m_ReconnectTimeout_ms = 5000;
+                uint32_t m_CloseConnectionDelay_ms = 1000;
 			} m_Cfg;
 
 			class Connection
@@ -197,9 +200,10 @@ namespace proto {
 
 				// NodeConnection
 				virtual void OnConnectedSecure() override;
+				virtual void OnLogin(Login&&) override;
+				virtual void SetupLogin(Login&) override;
 				virtual void OnDisconnect(const DisconnectReason&) override;
 				virtual void OnMsg(proto::Authentication&& msg) override;
-				virtual void OnMsg(proto::Login&& msg) override;
 				virtual void OnMsg(proto::GetBlockFinalization&& msg) override;
 				virtual void OnMsg(proto::NewTip&& msg) override;
 				virtual void OnMsg(proto::ProofCommonState&& msg) override;

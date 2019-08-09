@@ -22,12 +22,12 @@
 #include <boost/algorithm/string/trim.hpp>
 #include <map>
 
+#include "utility/cli/options.h"
 #include "utility/helpers.h"
 #include "utility/io/timer.h"
 #include "utility/io/tcpserver.h"
 #include "utility/io/sslserver.h"
 #include "utility/io/json_serializer.h"
-#include "utility/options.h"
 #include "utility/string_helpers.h"
 #include "utility/log_rotation.h"
 
@@ -38,6 +38,9 @@
 
 #include "wallet/wallet_db.h"
 #include "wallet/wallet_network.h"
+#include "wallet/bitcoin/options.h"
+#include "wallet/litecoin/options.h"
+#include "wallet/qtum/options.h"
 
 #include "nlohmann/json.hpp"
 #include "version.h"
@@ -47,8 +50,13 @@ using json = nlohmann::json;
 static const unsigned LOG_ROTATION_PERIOD = 3 * 60 * 60 * 1000; // 3 hours
 static const size_t PACKER_FRAGMENTS_SIZE = 4096;
 
-namespace beam
+using namespace beam;
+using namespace beam::wallet;
+
+namespace
 {
+    const char* MinimumFeeError = "Failed to initiate the send operation. The minimum fee is 100 GROTH.";
+
     struct TlsOptions
     {
         bool use;
@@ -112,7 +120,7 @@ namespace beam
     class WalletApiServer : public IWalletApiServer
     {
     public:
-        WalletApiServer(IWalletDB::Ptr walletDB, Wallet& wallet, WalletNetworkViaBbs& wnet, io::Reactor& reactor, 
+        WalletApiServer(IWalletDB::Ptr walletDB, Wallet& wallet, IWalletMessageEndpoint& wnet, io::Reactor& reactor, 
             io::Address listenTo, bool useHttp, WalletApi::ACL acl, const TlsOptions& tlsOptions, const std::vector<uint32_t>& whitelist)
             : _reactor(reactor)
             , _bindAddress(listenTo)
@@ -215,7 +223,7 @@ namespace beam
         class ApiConnection : IWalletApiHandler, IWalletDbObserver
         {
         public:
-            ApiConnection(IWalletDB::Ptr walletDB, Wallet& wallet, WalletNetworkViaBbs& wnet, WalletApi::ACL acl)
+            ApiConnection(IWalletDB::Ptr walletDB, Wallet& wallet, IWalletMessageEndpoint& wnet, WalletApi::ACL acl)
                 : _walletDB(walletDB)
                 , _wallet(wallet)
                 , _api(*this, acl)
@@ -228,16 +236,6 @@ namespace beam
             {
                 _walletDB->unsubscribe(this);
             }
-
-            void onCoinsChanged() override {}
-            void onTransactionChanged(ChangeAction action, std::vector<TxDescription>&& items) override {}
-
-            void onSystemStateChanged() override 
-            {
-                
-            }
-
-            void onAddressChanged() override {}
 
             virtual void serializeMsg(const json& msg) = 0;
 
@@ -273,16 +271,38 @@ namespace beam
                 serializeMsg(msg);
             }
 
+            void FillAddressData(const AddressData& data, WalletAddress& address)
+            {
+                if (data.comment)
+                {
+                    address.setLabel(*data.comment);
+                }
+
+                if (data.expiration)
+                {
+                    switch (*data.expiration)
+                    {
+                    case EditAddress::OneDay:
+                        address.setExpiration(WalletAddress::ExpirationStatus::OneDay);
+                        break;
+                    case EditAddress::Expired:
+                        address.setExpiration(WalletAddress::ExpirationStatus::Expired);
+                        break;
+                    case EditAddress::Never:
+                        address.setExpiration(WalletAddress::ExpirationStatus::Never);
+                        break;
+                    }
+                }
+            }
+
             void onMessage(int id, const CreateAddress& data) override 
             {
-                LOG_DEBUG() << "CreateAddress(id = " << id << " lifetime = " << data.lifetime << ")";
+                LOG_DEBUG() << "CreateAddress(id = " << id << ")";
 
-                WalletAddress address = wallet::createAddress(*_walletDB);
-                address.m_duration = data.lifetime * 60 * 60;
+                WalletAddress address = storage::createAddress(*_walletDB);
+                FillAddressData(data, address);
 
                 _walletDB->saveAddress(address);
-
-                _wnet.AddOwnAddress(address);
 
                 doResponse(id, CreateAddress::Response{ address.m_walletID });
             }
@@ -295,11 +315,6 @@ namespace beam
 
                 if (addr)
                 {
-                    if (addr->m_OwnID)
-                    {
-                        _wnet.DeleteOwnAddress(addr->m_OwnID);
-                    }
-
                     _walletDB->deleteAddress(data.address);
 
                     doResponse(id, DeleteAddress::Response{});
@@ -320,29 +335,8 @@ namespace beam
                 {
                     if (addr->m_OwnID)
                     {
-                        if (data.comment)
-                        {
-                            addr->setLabel(*data.comment);
-                        }
-
-                        if (data.expiration)
-                        {
-                            switch (*data.expiration)
-                            {
-                            case EditAddress::OneDay:
-                                addr->makeActive(24 * 60 * 60);
-                                break;
-                            case EditAddress::Expired:
-                                addr->makeExpired();
-                                break;
-                            case EditAddress::Never:
-                                addr->makeEternal();
-                                break;
-                            }
-                        }
-
+                        FillAddressData(data, *addr);
                         _walletDB->saveAddress(*addr);
-                        _wnet.AddOwnAddress(*addr);
 
                         doResponse(id, EditAddress::Response{});
                     }
@@ -402,28 +396,45 @@ namespace beam
                     }
                     else
                     {
-                        WalletAddress senderAddress = wallet::createAddress(*_walletDB);
+                        WalletAddress senderAddress = storage::createAddress(*_walletDB);
                         _walletDB->saveAddress(senderAddress);
-
-                        _wnet.AddOwnAddress(senderAddress);
 
                         from = senderAddress.m_walletID;     
                     }
 
                     ByteBuffer message(data.comment.begin(), data.comment.end());
 
-                    auto txId = _wallet.transfer_money(from, data.address, data.value, data.fee, data.coins, true, 120, 720, std::move(message));
+                    CoinIDList coins;
+
+                    if (data.session)
+                    {
+                        coins = _walletDB->getLockedCoins(*data.session);
+
+                        if (coins.empty())
+                        {
+                            doError(id, INTERNAL_JSON_RPC_ERROR, "Requested session is empty.");
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        coins = data.coins ? *data.coins : CoinIDList();
+                    }
+
+                    if (data.fee < MinimumFee)
+                    {
+                        doError(id, INTERNAL_JSON_RPC_ERROR, MinimumFeeError);
+                        return;
+                    }
+
+                    auto txId = _wallet.transfer_money(from, data.address, data.value, data.fee, coins, true, kDefaultTxLifetime, kDefaultTxResponseTime, std::move(message), true);
+
                     doResponse(id, Send::Response{ txId });
                 }
                 catch(...)
                 {
                     doError(id, INTERNAL_JSON_RPC_ERROR, "Transaction could not be created. Please look at logs.");
                 }
-            }
-
-            void onMessage(int id, const Replace& data) override
-            {
-                methodNotImplementedYet(id);
             }
 
             void onMessage(int id, const Status& data) override
@@ -443,7 +454,7 @@ namespace beam
                     result.systemHeight = stateID.m_Height;
                     result.confirmations = 0;
 
-                    wallet::getTxParameter(*_walletDB, tx->m_txId, wallet::TxParameterID::KernelProofHeight, result.kernelProofHeight);
+                    storage::getTxParameter(*_walletDB, tx->m_txId, TxParameterID::KernelProofHeight, result.kernelProofHeight);
 
                     doResponse(id, result);
                 }
@@ -460,9 +471,14 @@ namespace beam
                 LOG_DEBUG() << "], fee = " << data.fee;
                 try
                 {
-                     WalletAddress senderAddress = wallet::createAddress(*_walletDB);
+                     WalletAddress senderAddress = storage::createAddress(*_walletDB);
                     _walletDB->saveAddress(senderAddress);
-                    _wnet.AddOwnAddress(senderAddress);
+
+                    if (data.fee < MinimumFee)
+                    {
+                        doError(id, INTERNAL_JSON_RPC_ERROR, MinimumFeeError);
+                        return;
+                    }
 
                     auto txId = _wallet.split_coins(senderAddress.m_walletID, data.coins, data.fee);
                     doResponse(id, Send::Response{ txId });
@@ -498,6 +514,38 @@ namespace beam
                 }
             }
 
+            void onMessage(int id, const TxDelete& data) override
+            {
+                LOG_DEBUG() << "TxDelete(txId = " << to_hex(data.txId.data(), data.txId.size()) << ")";
+
+                auto tx = _walletDB->getTx(data.txId);
+
+                if (tx)
+                {
+                    if (tx->canDelete())
+                    {
+                        _walletDB->deleteTx(data.txId);
+
+                        if (_walletDB->getTx(data.txId))
+                        {
+                            doError(id, INTERNAL_JSON_RPC_ERROR, "Transaction not deleted.");
+                        }
+                        else
+                        {
+                            doResponse(id, TxDelete::Response{true});
+                        }
+                    }
+                    else
+                    {
+                        doError(id, INTERNAL_JSON_RPC_ERROR, "Transaction can't be deleted.");
+                    }
+                }
+                else
+                {
+                    doError(id, INVALID_PARAMS_JSON_RPC, "Unknown transaction ID.");
+                }
+            }
+
             template<typename T>
             static void doPagination(size_t skip, size_t count, std::vector<T>& res)
             {
@@ -522,7 +570,7 @@ namespace beam
                 LOG_DEBUG() << "GetUtxo(id = " << id << ")";
 
                 GetUtxo::Response response;
-                _walletDB->visit([&response](const Coin& c)->bool
+                _walletDB->visitCoins([&response](const Coin& c)->bool
                 {
                     response.utxos.push_back(c);
                     return true;
@@ -554,26 +602,36 @@ namespace beam
                     response.difficulty = state.m_PoW.m_Difficulty.ToFloat();
                 }
 
-				wallet::Totals totals(*_walletDB);
+                storage::Totals totals(*_walletDB);
 
                 response.available = totals.Avail;
                 response.receiving = totals.Incoming;
                 response.sending = totals.Outgoing;
                 response.maturing = totals.Maturing;
 
-                response.locked = 0; // same as Outgoing?
-
                 doResponse(id, response);
             }
 
             void onMessage(int id, const Lock& data) override
             {
-                methodNotImplementedYet(id);
+                LOG_DEBUG() << "Lock(id = " << id << ")";
+
+                Lock::Response response;
+
+                response.result = _walletDB->lockCoins(data.coins, data.session);
+
+                doResponse(id, response);
             }
 
             void onMessage(int id, const Unlock& data) override
             {
-                methodNotImplementedYet(id);
+                LOG_DEBUG() << "Unlock(id = " << id << " session = " << data.session << ")";
+
+                Unlock::Response response;
+
+                response.result = _walletDB->unlockCoins(data.session);
+
+                doResponse(id, response);
             }
 
             void onMessage(int id, const TxList& data) override
@@ -596,7 +654,7 @@ namespace beam
                         item.systemHeight = stateID.m_Height;
                         item.confirmations = 0;
 
-                        wallet::getTxParameter(*_walletDB, tx.m_txId, wallet::TxParameterID::KernelProofHeight, item.kernelProofHeight);
+                        storage::getTxParameter(*_walletDB, tx.m_txId, TxParameterID::KernelProofHeight, item.kernelProofHeight);
                         res.resultList.push_back(item);
                     }
                 }
@@ -642,13 +700,13 @@ namespace beam
             IWalletDB::Ptr _walletDB;
             Wallet& _wallet;
             WalletApi _api;
-            WalletNetworkViaBbs& _wnet;
+            IWalletMessageEndpoint& _wnet;
         };
 
         class TcpApiConnection : public ApiConnection
         {
         public:
-            TcpApiConnection(IWalletApiServer& server, IWalletDB::Ptr walletDB, Wallet& wallet, WalletNetworkViaBbs& wnet, io::TcpStream::Ptr&& newStream, WalletApi::ACL acl)
+            TcpApiConnection(IWalletApiServer& server, IWalletDB::Ptr walletDB, Wallet& wallet, IWalletMessageEndpoint& wnet, io::TcpStream::Ptr&& newStream, WalletApi::ACL acl)
                 : ApiConnection(walletDB, wallet, wnet, acl)
                 , _stream(std::move(newStream))
                 , _lineProtocol(BIND_THIS_MEMFN(on_raw_message), BIND_THIS_MEMFN(on_write))
@@ -708,7 +766,7 @@ namespace beam
         class HttpApiConnection : public ApiConnection
         {
         public:
-            HttpApiConnection(IWalletApiServer& server, IWalletDB::Ptr walletDB, Wallet& wallet, WalletNetworkViaBbs& wnet, io::TcpStream::Ptr&& newStream, WalletApi::ACL acl)
+            HttpApiConnection(IWalletApiServer& server, IWalletDB::Ptr walletDB, Wallet& wallet, IWalletMessageEndpoint& wnet, io::TcpStream::Ptr&& newStream, WalletApi::ACL acl)
                 : ApiConnection(walletDB, wallet, wnet, acl)
                 , _keepalive(false)
                 , _msgCreator(2000)
@@ -827,7 +885,7 @@ namespace beam
 
         IWalletDB::Ptr _walletDB;
         Wallet& _wallet;
-        WalletNetworkViaBbs& _wnet;
+        IWalletMessageEndpoint& _wnet;
         std::vector<uint64_t> _pendingToClose;
         WalletApi::ACL _acl;
         std::vector<uint32_t> _whitelist;
@@ -850,6 +908,7 @@ int main(int argc, char* argv[])
             std::string walletPath;
             std::string nodeURI;
             bool useHttp;
+            Nonnegative<uint32_t> pollPeriod_ms;
 
             bool useAcl;
             std::string aclPath;
@@ -878,6 +937,7 @@ int main(int argc, char* argv[])
                 (cli::API_USE_HTTP, po::value<bool>(&options.useHttp)->default_value(false), "use JSON RPC over HTTP")
                 (cli::IP_WHITELIST, po::value<std::string>(&options.whitelist)->default_value(""), "IP whitelist")
                 (cli::LOG_CLEANUP_DAYS, po::value<uint32_t>(&options.logCleanupPeriod)->default_value(5), "old logfiles cleanup period(days)")
+                (cli::NODE_POLL_PERIOD, po::value<Nonnegative<uint32_t>>(&options.pollPeriod_ms)->default_value(Nonnegative<uint32_t>(0)), "Node poll period in milliseconds. Set to 0 to keep connection. Anyway poll period would be no less than the expected rate of blocks if it is less then it will be rounded up to block rate value.")
             ;
 
             po::options_description authDesc("User authorization options");
@@ -925,7 +985,7 @@ int main(int argc, char* argv[])
 
             Rules::get().UpdateChecksum();
             LOG_INFO() << "Beam Wallet API " << PROJECT_VERSION << " (" << BRANCH_NAME << ")";
-            LOG_INFO() << "Rules signature: " << Rules::get().Checksum;
+            LOG_INFO() << "Rules signature: " << Rules::get().get_SignatureStr();
             
             if (options.useAcl)
             {
@@ -1014,15 +1074,31 @@ int main(int argc, char* argv[])
 
         Wallet wallet{ walletDB };
 
-        proto::FlyClient::NetworkStd nnet(wallet);
-        nnet.m_Cfg.m_vNodes.push_back(node_addr);
-        nnet.Connect();
+        auto nnet = std::make_shared<proto::FlyClient::NetworkStd>(wallet);
+        nnet->m_Cfg.m_PollPeriod_ms = options.pollPeriod_ms.value;
+        
+        if (nnet->m_Cfg.m_PollPeriod_ms)
+        {
+            LOG_INFO() << "Node poll period = " << nnet->m_Cfg.m_PollPeriod_ms << " ms";
+            uint32_t timeout_ms = std::max(Rules::get().DA.Target_s * 1000, nnet->m_Cfg.m_PollPeriod_ms);
+            if (timeout_ms != nnet->m_Cfg.m_PollPeriod_ms)
+            {
+                LOG_INFO() << "Node poll period has been automatically rounded up to block rate: " << timeout_ms << " ms";
+            }
+        }
+        uint32_t responceTime_s = Rules::get().DA.Target_s * wallet::kDefaultTxResponseTime;
+        if (nnet->m_Cfg.m_PollPeriod_ms >= responceTime_s * 1000)
+        {
+            LOG_WARNING() << "The \"--node_poll_period\" parameter set to more than " << uint32_t(responceTime_s / 3600) << " hours may cause transaction problems.";
+        }
+        nnet->m_Cfg.m_vNodes.push_back(node_addr);
+        nnet->Connect();
 
-        WalletNetworkViaBbs wnet(wallet, nnet, walletDB);
+        auto wnet = std::make_shared<WalletNetworkViaBbs>(wallet, nnet, walletDB);
+		wallet.AddMessageEndpoint(wnet);
+        wallet.SetNodeEndpoint(nnet);
 
-        wallet.set_Network(nnet, wnet);
-
-        WalletApiServer server(walletDB, wallet, wnet, *reactor, 
+        WalletApiServer server(walletDB, wallet, *wnet, *reactor, 
             listenTo, options.useHttp, acl, tlsOptions, whitelist);
 
         io::Reactor::get_Current().run();

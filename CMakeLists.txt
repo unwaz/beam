@@ -1,14 +1,15 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.5)
+cmake_policy(SET CMP0074 NEW)
 
-set(VERSION_MAJOR 2)
+set(VERSION_MAJOR 3)
 set(VERSION_MINOR 0)
 set(VERSION_REVISION 0)
 set(GIT_COMMIT_HASH "unknown")
 
-set(BEAM_SUFFIX_LOWER_CASE "")
-set(BEAM_SUFFIX_UPPER_CASE "")
-set(BEAM_TARGET_SUFFIX "")
-set(BEAM_DISPLAY_SUFFIX "")
+set(BEAM_SUFFIX_LOWER_CASE "masternet")
+set(BEAM_SUFFIX_UPPER_CASE "Masternet")
+set(BEAM_TARGET_SUFFIX "-${BEAM_SUFFIX_LOWER_CASE}")
+set(BEAM_DISPLAY_SUFFIX " ${BEAM_SUFFIX_UPPER_CASE}")
 
 if (BEAM_SIGN_PACKAGE AND WIN32)
   #  add_custom_target(signing ALL DEPENDS beam-wallet-ui COMMENT "Signing Package...")
@@ -97,8 +98,8 @@ enable_testing()
 
 function(add_test_snippet EXE_NAME LIB_NAME)
     add_executable(${EXE_NAME} ${EXE_NAME}.cpp)
-    add_dependencies(${EXE_NAME} ${LIB_NAME})
-    target_link_libraries(${EXE_NAME} ${LIB_NAME})
+    add_dependencies(${EXE_NAME} ${LIB_NAME} ${ARGN})
+    target_link_libraries(${EXE_NAME} ${LIB_NAME} ${ARGN})
     add_test(NAME ${EXE_NAME} COMMAND $<TARGET_FILE:${EXE_NAME}>)
 endfunction()
 
@@ -139,12 +140,48 @@ if(SHOW_CODE_LOCATION)
     add_definitions(-DSHOW_CODE_LOCATION=1)
 endif()
 
-if(BRANCH_NAME MATCHES "testnet")
-    add_definitions(-DBEAM_TESTNET)
-endif()
+# uncoment next line for testnet
+#set(BEAM_TESTNET TRUE)
+# uncoment next line for mainnet
+#set(BEAM_MAINNET TRUE)
 
 if(BEAM_TESTNET)
     add_definitions(-DBEAM_TESTNET)
+    set(BEAM_SUFFIX_LOWER_CASE "testnet")
+    set(BEAM_SUFFIX_UPPER_CASE "Testnet")
+    set(BEAM_TARGET_SUFFIX "-${BEAM_SUFFIX_LOWER_CASE}")
+    set(BEAM_DISPLAY_SUFFIX " ${BEAM_SUFFIX_UPPER_CASE}")
+elseif(BEAM_MAINNET)
+    add_definitions(-DBEAM_MAINNET)
+    set(BEAM_SUFFIX_LOWER_CASE "")
+    set(BEAM_SUFFIX_UPPER_CASE "")
+    set(BEAM_TARGET_SUFFIX "")
+    set(BEAM_DISPLAY_SUFFIX "")
+endif()
+
+option(BEAM_HW_WALLET "Build with hardware wallet support" OFF)
+
+if(BEAM_HW_WALLET)
+
+    if(BEAM_USE_STATIC)
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL "")
+
+        if(WIN32)
+            set(CURL_STATIC_CRT ON CACHE BOOL "")
+        endif()
+
+        add_definitions(-DCURL_STATICLIB)
+    else()        
+        if(WIN32)
+            set(protobuf_MSVC_STATIC_RUNTIME OFF CACHE BOOL "")
+        endif()
+    endif()
+
+    set(protobuf_BUILD_TESTS OFF CACHE BOOL "")
+    set(protobuf_BUILD_PROTOC_BINARIES OFF CACHE BOOL "")
+
+    add_subdirectory(3rdparty/protobuf/cmake)
+
 endif()
 
 if(MSVC)
@@ -163,6 +200,8 @@ if(MSVC)
     SET(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /OPT:REF /INCREMENTAL:NO")
     SET(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO} /OPT:REF /INCREMENTAL:NO")
     SET(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} /OPT:REF /INCREMENTAL:NO")
+
+    add_definitions(-D_WIN32_WINNT=0x0600)
 
     if(BEAM_USE_STATIC)
         # use static runtime
@@ -199,6 +238,12 @@ else()
 
 endif()
 
+if(BEAM_HW_WALLET)
+    set(HTTP_ONLY ON CACHE BOOL "")
+    set(BUILD_CURL_EXE OFF CACHE BOOL "")
+    add_subdirectory(3rdparty/curl)
+endif()
+
 if(UNIX OR WIN32)
     set(UV_INTERNAL ON)
     add_definitions(-DUV_INTERNAL)
@@ -210,26 +255,29 @@ if(ANDROID)
     include_directories($ENV{BOOST_ROOT_ANDROID}/include)
 else()
 
+    if(LINUX)
+        add_definitions(-DBOOST_NO_CXX11_SCOPED_ENUMS)
+        add_definitions(-DBOOST_NO_AUTO_PTR)
+    endif()
+
+    if (WIN32)
+        add_definitions(-DNOMINMAX)
+    endif()
+
     find_package(Boost REQUIRED)
 
     if(BEAM_USE_STATIC)
         include(FindBoost)
+
         set(Boost_USE_MULTITHREADED ON)
         set(Boost_USE_STATIC_LIBS ON)
         set(Boost_USE_STATIC_RUNTIME ON)
-        else()
+    else()
         if (WIN32)
             add_definitions( -DBOOST_ALL_DYN_LINK )
         endif()
     endif()
-endif()
 
-if(LINUX)
-	add_definitions(-DBOOST_NO_CXX11_SCOPED_ENUMS)
-endif()
-
-if (WIN32)
-    add_definitions(-DNOMINMAX)
 endif()
 
 include_directories(${PROJECT_SOURCE_DIR})
@@ -300,6 +348,10 @@ if(Boost_FOUND)
     set_property(TARGET boost PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${Boost_INCLUDE_DIR})
 endif()
 
+add_definitions(-DBC_STATIC)
+
+add_subdirectory(3rdparty/secp256k1-zkp)
+add_subdirectory(3rdparty/libbitcoin)
 add_subdirectory(3rdparty/sqlite)
 add_subdirectory(utility)
 add_subdirectory(core)
@@ -308,20 +360,24 @@ add_subdirectory(p2p)
 add_subdirectory(http)
 add_subdirectory(wallet)
 add_subdirectory(node)
-add_subdirectory(beam)
-add_subdirectory(explorer)
 add_subdirectory(mnemonic)
+
 
 if(ANDROID OR BEAM_BUILD_JNI)
     add_subdirectory(android)
 endif()
 
 # TODO: uncomment this later
-if(NOT ANDROID AND BEAM_QT_UI_WALLET)
-    add_subdirectory(3rdparty/qrcode)
-    add_subdirectory(3rdparty/quazip)
-    add_subdirectory(ui)
-endif()
+if(NOT ANDROID)
+    add_subdirectory(beam)
+    add_subdirectory(explorer)
+
+    if(BEAM_QT_UI_WALLET)
+        add_subdirectory(3rdparty/qrcode)
+        add_subdirectory(3rdparty/quazip)
+        add_subdirectory(ui)
+    endif()
+ endif()
 
 ########################################################
 ### PACKAGING ##########################################
@@ -350,6 +406,7 @@ elseif (APPLE)
     set(CPACK_BUNDLE_STARTUP_COMMAND "ui/Beam Wallet${BEAM_DISPLAY_SUFFIX}")
 
     if(BEAM_SIGN_MACOS_BINARY)
+        set(CPACK_COMMAND_CODESIGN "codesign -o runtime --timestamp")
         set(CPACK_BUNDLE_APPLE_CERT_APP "Developer ID Application: Beam Development Limited (KNU2R94BJK)")
     endif()
 elseif (LINUX)

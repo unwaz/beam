@@ -19,16 +19,58 @@
 #include "common.h"
 
 using namespace beam;
+using namespace beam::wallet;
 using namespace beam::io;
 using namespace std;
 
-WalletModel::WalletModel(IWalletDB::Ptr walletDB, const std::string& nodeAddr, beam::io::Reactor::Ptr reactor)
+namespace
+{
+    jobjectArray convertCoinsToJObject(JNIEnv* env, const std::vector<Coin>& utxosVec)
+    {
+        jobjectArray utxos = 0;
+
+        if (!utxosVec.empty())
+        {
+            utxos = env->NewObjectArray(static_cast<jsize>(utxosVec.size()), UtxoClass, NULL);
+
+            for (int i = 0; i < utxosVec.size(); ++i)
+            {
+                const auto& coin = utxosVec[i];
+
+                jobject utxo = env->AllocObject(UtxoClass);
+
+                setLongField(env, UtxoClass, utxo, "id", coin.m_ID.m_Idx);
+                setStringField(env, UtxoClass, utxo, "stringId", coin.toStringID());
+                setLongField(env, UtxoClass, utxo, "amount", coin.m_ID.m_Value);
+                setIntField(env, UtxoClass, utxo, "status", coin.m_status);
+                setLongField(env, UtxoClass, utxo, "maturity", coin.m_maturity);
+                setIntField(env, UtxoClass, utxo, "keyType", static_cast<jint>(coin.m_ID.m_Type));
+                setLongField(env, UtxoClass, utxo, "confirmHeight", coin.m_confirmHeight);
+
+                if (coin.m_createTxId)
+                    setStringField(env, UtxoClass, utxo, "createTxId", to_hex(coin.m_createTxId->data(), coin.m_createTxId->size()));
+
+                if (coin.m_spentTxId)
+                    setStringField(env, UtxoClass, utxo, "spentTxId", to_hex(coin.m_spentTxId->data(), coin.m_spentTxId->size()));
+
+                env->SetObjectArrayElement(utxos, i, utxo);
+
+                env->DeleteLocalRef(utxo);
+            }
+        }
+
+        return utxos;
+    }
+}
+
+WalletModel::WalletModel(IWalletDB::Ptr walletDB, const std::string& nodeAddr, Reactor::Ptr reactor)
     : WalletClient(walletDB, nodeAddr, reactor)
 {    
 }
 
 WalletModel::~WalletModel()
 {
+    stopReactor();
 }
 
 void WalletModel::onStatus(const WalletStatus& status)
@@ -62,7 +104,7 @@ void WalletModel::onStatus(const WalletStatus& status)
     env->DeleteLocalRef(walletStatus);
 }
 
-void WalletModel::onTxStatus(beam::ChangeAction action, const std::vector<beam::TxDescription>& items)
+void WalletModel::onTxStatus(ChangeAction action, const std::vector<TxDescription>& items)
 {
     LOG_DEBUG() << "onTxStatus()";
 
@@ -97,7 +139,7 @@ void WalletModel::onTxStatus(beam::ChangeAction action, const std::vector<beam::
             setBooleanField(env, TxDescriptionClass, tx, "sender", item.m_sender);
             setBooleanField(env, TxDescriptionClass, tx, "selfTx", item.m_selfTx);
             setIntField(env, TxDescriptionClass, tx, "status", static_cast<jint>(item.m_status));
-            setStringField(env, TxDescriptionClass, tx, "kernelId", beam::to_hex(item.m_kernelID.m_pData, item.m_kernelID.nBytes));
+            setStringField(env, TxDescriptionClass, tx, "kernelId", to_hex(item.m_kernelID.m_pData, item.m_kernelID.nBytes));
             setIntField(env, TxDescriptionClass, tx, "failureReason", static_cast<jint>(item.m_failureReason));
 
             env->SetObjectArrayElement(txItems, i, tx);
@@ -122,7 +164,7 @@ void WalletModel::onSyncProgressUpdated(int done, int total)
     env->CallStaticVoidMethod(WalletListenerClass, callback, done, total);
 }
 
-void WalletModel::onChangeCalculated(beam::Amount change)
+void WalletModel::onChangeCalculated(Amount change)
 {
     LOG_DEBUG() << "onChangeCalculated(" << change << ")";
 
@@ -133,45 +175,13 @@ void WalletModel::onChangeCalculated(beam::Amount change)
     env->CallStaticVoidMethod(WalletListenerClass, callback, change);
 }
 
-void WalletModel::onAllUtxoChanged(const std::vector<beam::Coin>& utxosVec)
+void WalletModel::onAllUtxoChanged(const std::vector<Coin>& utxosVec)
 {
     LOG_DEBUG() << "onAllUtxoChanged()";
 
     JNIEnv* env = Android_JNI_getEnv();
 
-    jobjectArray utxos = 0;
-
-    if (!utxosVec.empty())
-    {
-        utxos = env->NewObjectArray(static_cast<jsize>(utxosVec.size()), UtxoClass, NULL);
-
-        for (int i = 0; i < utxosVec.size(); ++i)
-        {
-            const auto& coin = utxosVec[i];
-
-            jobject utxo = env->AllocObject(UtxoClass);
-
-            setLongField(env, UtxoClass, utxo, "id", coin.m_ID.m_Idx);
-            setStringField(env, UtxoClass, utxo, "stringId", coin.toStringID());
-            setLongField(env, UtxoClass, utxo, "amount", coin.m_ID.m_Value);
-            setIntField(env, UtxoClass, utxo, "status", coin.m_status);
-            setLongField(env, UtxoClass, utxo, "maturity", coin.m_maturity);
-            setIntField(env, UtxoClass, utxo, "keyType", static_cast<jint>(coin.m_ID.m_Type));
-            setLongField(env, UtxoClass, utxo, "confirmHeight", coin.m_confirmHeight);
-
-            if (coin.m_createTxId)
-                setStringField(env, UtxoClass, utxo, "createTxId", to_hex(coin.m_createTxId->data(), coin.m_createTxId->size()));
-
-            if (coin.m_spentTxId)
-                setStringField(env, UtxoClass, utxo, "spentTxId", to_hex(coin.m_spentTxId->data(), coin.m_spentTxId->size()));
-
-            env->SetObjectArrayElement(utxos, i, utxo);
-
-            env->DeleteLocalRef(utxo);
-        }
-    }
-
-    //////////////////////////////////
+    jobjectArray utxos = convertCoinsToJObject(env, utxosVec);
 
     jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onAllUtxoChanged", "([L" BEAM_JAVA_PATH "/entities/dto/UtxoDTO;)V");
     env->CallStaticVoidMethod(WalletListenerClass, callback, utxos);
@@ -179,7 +189,7 @@ void WalletModel::onAllUtxoChanged(const std::vector<beam::Coin>& utxosVec)
     env->DeleteLocalRef(utxos);
 }
 
-void WalletModel::onAddresses(bool own, const std::vector<beam::WalletAddress>& addresses)
+void WalletModel::onAddresses(bool own, const std::vector<WalletAddress>& addresses)
 {
     LOG_DEBUG() << "onAddresses(" << own << ")";
 
@@ -218,7 +228,7 @@ void WalletModel::onAddresses(bool own, const std::vector<beam::WalletAddress>& 
     env->DeleteLocalRef(addrArray);
 }
 
-void WalletModel::onGeneratedNewAddress(const beam::WalletAddress& address)
+void WalletModel::onGeneratedNewAddress(const WalletAddress& address)
 {
     LOG_DEBUG() << "onGeneratedNewAddress()";
 
@@ -241,7 +251,12 @@ void WalletModel::onGeneratedNewAddress(const beam::WalletAddress& address)
     env->DeleteLocalRef(addr);
 }
 
-void WalletModel::onChangeCurrentWalletIDs(beam::WalletID senderID, beam::WalletID receiverID)
+void WalletModel::onNewAddressFailed()
+{
+
+}
+
+void WalletModel::onChangeCurrentWalletIDs(WalletID senderID, WalletID receiverID)
 {
 }
 
@@ -256,15 +271,15 @@ void WalletModel::onNodeConnectionChanged(bool isNodeConnected)
     env->CallStaticVoidMethod(WalletListenerClass, callback, isNodeConnected);
 }
 
-void WalletModel::onWalletError(beam::wallet::ErrorType error)
+void WalletModel::onWalletError(ErrorType error)
 {
-    LOG_DEBUG() << "onNodeConnectionFailed(): error = " << static_cast<int>(error);
+    LOG_DEBUG() << "onWalletError: error = " << static_cast<int>(error);
 
     JNIEnv* env = Android_JNI_getEnv();
 
-    jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onNodeConnectionFailed", "()V");
+    jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onNodeConnectionFailed", "(I)V");
 
-    env->CallStaticVoidMethod(WalletListenerClass, callback);
+    env->CallStaticVoidMethod(WalletListenerClass, callback, static_cast<int>(error));
 }
 
 void WalletModel::FailedToStartWallet()
@@ -286,7 +301,63 @@ void WalletModel::onCantSendToExpired()
     env->CallStaticVoidMethod(WalletListenerClass, callback);
 }
 
-void WalletModel::onPaymentProofExported(const beam::TxID& txID, const beam::ByteBuffer& proof)
+void WalletModel::onPaymentProofExported(const TxID& txID, const ByteBuffer& proof)
+{
+    string strProof;
+    strProof.resize(proof.size() * 2);
+
+    to_hex(strProof.data(), proof.data(), proof.size());
+    storage::PaymentInfo paymentInfo = storage::PaymentInfo::FromByteBuffer(proof);
+
+    JNIEnv* env = Android_JNI_getEnv();
+
+    jobject jPaymentInfo = env->AllocObject(PaymentInfoClass);
+
+    {
+        setStringField(env, PaymentInfoClass, jPaymentInfo, "senderId", to_string(paymentInfo.m_Sender));
+        setStringField(env, PaymentInfoClass, jPaymentInfo, "receiverId", to_string(paymentInfo.m_Receiver));
+        setLongField(env, PaymentInfoClass, jPaymentInfo, "amount", paymentInfo.m_Amount);
+        setStringField(env, PaymentInfoClass, jPaymentInfo, "kernelId", to_string(paymentInfo.m_KernelID));
+        setBooleanField(env, PaymentInfoClass, jPaymentInfo, "isValid", paymentInfo.IsValid());
+        setStringField(env, PaymentInfoClass, jPaymentInfo, "rawProof", strProof);
+    }
+
+    jstring jStrTxId = env->NewStringUTF(to_hex(txID.data(), txID.size()).c_str());
+
+    jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onPaymentProofExported", "(Ljava/lang/String;L" BEAM_JAVA_PATH "/entities/dto/PaymentInfoDTO;)V");
+
+    
+    //jstring jStrProof = env->NewStringUTF(str.c_str());
+    env->CallStaticVoidMethod(WalletListenerClass, callback, jStrTxId, jPaymentInfo);
+
+    env->DeleteLocalRef(jStrTxId);
+    env->DeleteLocalRef(jPaymentInfo);
+}
+
+void WalletModel::onCoinsByTx(const std::vector<Coin>& coins)
+{
+    JNIEnv* env = Android_JNI_getEnv();
+
+    jobjectArray utxos = convertCoinsToJObject(env, coins);
+
+    jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onCoinsByTx", "([L" BEAM_JAVA_PATH "/entities/dto/UtxoDTO;)V");
+    env->CallStaticVoidMethod(WalletListenerClass, callback, utxos);
+
+    env->DeleteLocalRef(utxos);
+}
+
+void WalletModel::onAddressChecked(const std::string& addr, bool isValid)
 {
 
+}
+
+void WalletModel::onImportRecoveryProgress(uint64_t done, uint64_t total)
+{
+    LOG_DEBUG() << "onImportRecoveryProgress(" << done << ", " << total << ")";
+
+    JNIEnv* env = Android_JNI_getEnv();
+
+    jmethodID callback = env->GetStaticMethodID(WalletListenerClass, "onImportRecoveryProgress", "(JJ)V");
+
+    env->CallStaticVoidMethod(WalletListenerClass, callback, done, total);
 }

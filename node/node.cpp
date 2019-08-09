@@ -16,6 +16,7 @@
 #include "../core/serialization_adapters.h"
 #include "../core/proto.h"
 #include "../core/ecc_native.h"
+#include "../core/block_rw.h"
 
 #include "../p2p/protocol.h"
 #include "../p2p/connection.h"
@@ -79,25 +80,12 @@ void Node::UpdateSyncStatus()
 
 void Node::UpdateSyncStatusRaw()
 {
-	Height hToCursor = m_Processor.m_Cursor.m_ID.m_Height * (SyncStatus::s_WeightHdr + SyncStatus::s_WeightBlock);
-	m_SyncStatus.m_Total = hToCursor;
-	m_SyncStatus.m_Done = hToCursor;
+	Height hTotal = m_Processor.m_Cursor.m_ID.m_Height;
+	Height hDoneBlocks = hTotal;
+	Height hDoneHdrs = hTotal;
 
 	if (m_Processor.IsFastSync())
-	{
-		m_SyncStatus.m_Total += (m_Processor.m_SyncData.m_Target.m_Height - m_Processor.m_Cursor.m_ID.m_Height) * (SyncStatus::s_WeightHdr + SyncStatus::s_WeightBlock);
-		m_SyncStatus.m_Done += (m_Processor.m_SyncData.m_Target.m_Height - m_Processor.m_Cursor.m_ID.m_Height) * SyncStatus::s_WeightHdr;
-
-		TaskSet::iterator it = m_setTasks.begin();
-		if (m_setTasks.end() != it)
-		{
-			const Block::SystemState::ID& id = it->m_Key.first;
-			if (id.m_Height > m_Processor.m_Cursor.m_ID.m_Height)
-				m_SyncStatus.m_Done += (id.m_Height - m_Processor.m_Cursor.m_ID.m_Height) * SyncStatus::s_WeightBlock;
-		}
-	}
-
-	bool bOnlyAssigned = (m_Processor.m_Cursor.m_ID.m_Height > 0);
+		hTotal = m_Processor.m_SyncData.m_Target.m_Height;
 
 	for (TaskSet::iterator it = m_setTasks.begin(); m_setTasks.end() != it; it++)
 	{
@@ -107,35 +95,70 @@ void Node::UpdateSyncStatusRaw()
 		if (m_Processor.m_Cursor.m_ID.m_Height >= t.m_sidTrg.m_Height)
 			continue;
 
-		if (bOnlyAssigned && !t.m_pOwner)
-			continue;
-
-		Height hVal = t.m_sidTrg.m_Height * (SyncStatus::s_WeightHdr + SyncStatus::s_WeightBlock);
-		m_SyncStatus.m_Total = std::max(m_SyncStatus.m_Total, hVal);
-
-		Height h = t.m_Key.first.m_Height;
-		if (h > t.m_sidTrg.m_Height)
-			continue; // ?!
-
 		bool bBlock = t.m_Key.second;
-		// If the request is the block - assume all the headers are received, as well as all the blocks up to cursor
-		// If the request is the header - assume headers are requested in reverse order, up to current cursor (which isn't true in case of fork, but it's a coarse estimate)
 		if (bBlock)
-			h = m_Processor.m_Cursor.m_ID.m_Height; // the height down to which all the headers are already downloaded
+		{
+			assert(t.m_Key.first.m_Height);
+			// all the blocks up to this had been dloaded
+			hTotal = std::max(hTotal, t.m_sidTrg.m_Height);
+			hDoneHdrs = std::max(hDoneHdrs, t.m_sidTrg.m_Height);
+			hDoneBlocks = std::max(hDoneBlocks, t.m_Key.first.m_Height - 1);
+		}
 		else
-			if (h)
-				h--;
+		{
+			if (!t.m_pOwner)
+				continue; // don't account for unowned
 
-		hVal = hToCursor + (t.m_sidTrg.m_Height - h) * SyncStatus::s_WeightHdr;
-		m_SyncStatus.m_Done = std::max(m_SyncStatus.m_Done, hVal);
+			hTotal = std::max(hTotal, t.m_sidTrg.m_Height);
+			if (t.m_sidTrg.m_Height > t.m_Key.first.m_Height)
+				hDoneHdrs = std::max(hDoneHdrs, m_Processor.m_Cursor.m_ID.m_Height + t.m_sidTrg.m_Height - t.m_Key.first.m_Height);
+		}
 	}
 
-	m_SyncStatus.m_Total = std::max(m_SyncStatus.m_Total, m_SyncStatus.m_Done);
+	// account for treasury
+	hTotal++;
+
+	if (m_Processor.IsTreasuryHandled())
+	{
+		hDoneBlocks++;
+		hDoneHdrs++;
+	}
+
+	// corrections
+	hDoneHdrs = std::max(hDoneHdrs, hDoneBlocks);
+	hTotal = std::max(hTotal, hDoneHdrs);
+
+	// consider the timestamp of the tip, upon successful sync it should not be too far in the past
+	if (m_Processor.m_Cursor.m_ID.m_Height < Rules::HeightGenesis)
+		hTotal++;
+	else
+	{
+		Timestamp ts0_s = m_Processor.m_Cursor.m_Full.m_TimeStamp;
+		Timestamp ts1_s = getTimestamp();
+
+		const Timestamp tolerance_s = 60 * 60 * 24 * 2; // 2 days tolerance. In case blocks not created for some reason (mining turned off on testnet or etc.) we still don't want to get stuck in sync mode
+		ts0_s += tolerance_s;
+
+		if (ts1_s > ts0_s)
+		{
+			ts1_s -= ts0_s;
+
+			hTotal++;
+
+			const uint32_t& trg_s = Rules::get().DA.Target_s;
+			if (trg_s)
+				hTotal = std::max(hTotal, m_Processor.m_Cursor.m_ID.m_Height + ts1_s / trg_s);
+		}
+
+	}
+
+	m_SyncStatus.m_Total = hTotal * (SyncStatus::s_WeightHdr + SyncStatus::s_WeightBlock);
+	m_SyncStatus.m_Done = hDoneHdrs * SyncStatus::s_WeightHdr + hDoneBlocks * SyncStatus::s_WeightBlock;
 }
 
 void Node::DeleteUnassignedTask(Task& t)
 {
-    assert(!t.m_pOwner && !t.m_bPack);
+    assert(!t.m_pOwner && !t.m_nCount);
     m_lstTasksUnassigned.erase(TaskList::s_iterator_to(t));
     m_setTasks.erase(TaskSet::s_iterator_to(t));
     delete &t;
@@ -313,10 +336,6 @@ bool Node::TryAssignTask(Task& t, Peer& p, bool bMustSupportLatestProto)
 
 bool Node::TryAssignTask(Task& t, Peer& p)
 {
-	uint32_t nPacks = t.m_Key.second ? m_nTasksPackBody : m_nTasksPackHdr;
-	if (nPacks)
-		return false;
-
     if (!p.ShouldAssignTasks())
         return false;
 
@@ -353,7 +372,8 @@ bool Node::TryAssignTask(Task& t, Peer& p)
     // assign
     if (t.m_Key.second)
     {
-		assert(!m_nTasksPackBody);
+		if (m_nTasksPackBody >= m_Cfg.m_MaxConcurrentBlocksRequest)
+			return false; // too many blocks requested
 
 		Height hCountExtra = t.m_sidTrg.m_Height - t.m_Key.first.m_Height;
 
@@ -385,8 +405,8 @@ bool Node::TryAssignTask(Task& t, Peer& p)
 
 			p.Send(msg);
 
-			t.m_bPack = true;
-			m_nTasksPackBody++;
+			t.m_nCount = std::min(static_cast<uint32_t>(msg.m_CountExtra), m_Cfg.m_BandwidthCtl.m_MaxBodyPackCount) + 1; // just an estimate, the actual num of blocks can be smaller
+			m_nTasksPackBody += t.m_nCount;
 		}
 		else
 		{
@@ -423,7 +443,8 @@ bool Node::TryAssignTask(Task& t, Peer& p)
 
 				pTask->m_sidTrg = t.m_sidTrg;
 				pTask->m_bNeeded = false;
-				pTask->m_bPack = false;
+				pTask->m_nCount = 1;
+				m_nTasksPackBody++;
 
 				t.m_Key.first.m_Height++;
 				uint64_t rowid = pPtr[t.m_sidTrg.m_Height - t.m_Key.first.m_Height];
@@ -437,42 +458,33 @@ bool Node::TryAssignTask(Task& t, Peer& p)
     }
     else
     {
-		assert(!m_nTasksPackHdr);
+		if (m_nTasksPackHdr >= proto::g_HdrPackMaxSize)
+			return false; // too many hdrs requested
 
         if (nBlocks)
             return false; // don't requests headers from the peer that transfers a block
 
-		uint32_t nPackSize = 0;
-		if (t.m_Key.first.m_Height > m_Processor.m_Cursor.m_ID.m_Height)
-		{
-			Height dh = t.m_Key.first.m_Height - m_Processor.m_Cursor.m_ID.m_Height;
-			if (dh > 1)
-			{
-				nPackSize = (proto::LoginFlags::Extension2 & p.m_LoginFlags) ?
-					proto::g_HdrPackMaxSize :
-					proto::g_HdrPackMaxSizeV0;
+		uint32_t nPackSize = (proto::LoginFlags::Extension2 & p.m_LoginFlags) ?
+			proto::g_HdrPackMaxSize :
+			proto::g_HdrPackMaxSizeV0;
 
-				if (nPackSize > dh)
-					nPackSize = (uint32_t)dh;
-			}
-		}
+		// make sure we're not dealing with overlaps
+		Height h0 = m_Processor.get_DB().get_HeightBelow(t.m_Key.first.m_Height);
+		assert(h0 < t.m_Key.first.m_Height);
+		Height dh = t.m_Key.first.m_Height - h0;
 
-        if (nPackSize)
-        {
-            proto::GetHdrPack msg;
-            msg.m_Top = t.m_Key.first;
-            msg.m_Count = nPackSize;
-            p.Send(msg);
+		if (nPackSize > dh)
+			nPackSize = (uint32_t) dh;
 
-            t.m_bPack = true;
-            m_nTasksPackHdr++;
-        }
-        else
-        {
-            proto::GetHdr msg;
-            msg.m_ID = t.m_Key.first;
-            p.Send(msg);
-        }
+		nPackSize = std::min(nPackSize, proto::g_HdrPackMaxSize - m_nTasksPackHdr);
+
+        proto::GetHdrPack msg;
+        msg.m_Top = t.m_Key.first;
+        msg.m_Count = nPackSize;
+        p.Send(msg);
+
+        t.m_nCount = nPackSize;
+        m_nTasksPackHdr += nPackSize;
     }
 
     bool bEmpty = p.m_lstTasks.empty();
@@ -512,7 +524,7 @@ void Node::Processor::RequestData(const Block::SystemState::ID& id, bool bBlock,
         pTask->m_Key = tKey.m_Key;
         pTask->m_sidTrg = sidTrg;
 		pTask->m_bNeeded = true;
-        pTask->m_bPack = false;
+        pTask->m_nCount = 0;
         pTask->m_pOwner = NULL;
 
         get_ParentObj().m_setTasks.insert(*pTask);
@@ -525,8 +537,14 @@ void Node::Processor::RequestData(const Block::SystemState::ID& id, bool bBlock,
 	{
 		Node::Task& t = *it;
 		t.m_bNeeded = true;
-		if (!t.m_pOwner && (t.m_sidTrg.m_Height < sidTrg.m_Height))
-			t.m_sidTrg = sidTrg;
+
+		if (!t.m_pOwner)
+		{
+			if (t.m_sidTrg.m_Height < sidTrg.m_Height)
+				t.m_sidTrg = sidTrg;
+
+			get_ParentObj().TryAssignTask(t, pPreferredPeer);
+		}
 	}
 }
 
@@ -563,6 +581,22 @@ void Node::Processor::FlushInsanePeers()
     }
 }
 
+void Node::Processor::DeleteOutdated()
+{
+	TxPool::Fluff& txp = get_ParentObj().m_TxPool;
+	for (TxPool::Fluff::Queue::iterator it = txp.m_Queue.begin(); txp.m_Queue.end() != it; )
+	{
+		TxPool::Fluff::Element& x = (it++)->get_ParentObj();
+		if (!x.m_pValue)
+			continue;
+		Transaction& tx = *x.m_pValue;
+
+		if (!ValidateTxContext(tx, x.m_Threshold.m_Height))
+			txp.Delete(x);
+	}
+}
+
+
 void Node::Processor::OnNewState()
 {
     m_Cwp.Reset();
@@ -575,8 +609,7 @@ void Node::Processor::OnNewState()
 	if (IsFastSync())
 		return;
 
-    //get_ParentObj().m_TxPool.DeleteOutOfBound(m_Cursor.m_Sid.m_Height + 1);
-    get_ParentObj().m_Processor.DeleteOutdated(get_ParentObj().m_TxPool); // Better to delete all irrelevant txs explicitly, even if the node is supposed to mine
+    DeleteOutdated(); // Better to delete all irrelevant txs explicitly, even if the node is supposed to mine
     // because in practice mining could be OFF (for instance, if miner key isn't defined, and owner wallet is offline).
 
     if (get_ParentObj().m_Miner.IsEnabled())
@@ -613,6 +646,54 @@ void Node::Processor::OnNewState()
 	IObserver* pObserver = get_ParentObj().m_Cfg.m_Observer;
 	if (pObserver)
 		pObserver->OnStateChanged();
+
+	get_ParentObj().MaybeGenerateRecovery();
+}
+
+void Node::MaybeGenerateRecovery()
+{
+	if (!m_PostStartSynced || m_Cfg.m_Recovery.m_sPathOutput.empty() || !m_Cfg.m_Recovery.m_Granularity)
+		return;
+
+	Height h0 = m_Processor.get_DB().ParamIntGetDef(NodeDB::ParamID::LastRecoveryHeight);
+	const Height& h1 = m_Processor.m_Cursor.m_ID.m_Height; // alias
+	if (h1 < h0 + m_Cfg.m_Recovery.m_Granularity)
+		return;
+
+	LOG_INFO() << "Generating recovery...";
+
+	std::ostringstream os;
+	os
+		<< m_Cfg.m_Recovery.m_sPathOutput
+		<< m_Processor.m_Cursor.m_ID;
+
+	std::string sPath = os.str();
+
+	std::string sTmp = sPath;
+	sTmp += ".tmp";
+
+	bool bOk = GenerateRecoveryInfo(sTmp.c_str());
+	if (bOk)
+	{
+#ifdef WIN32
+		bOk =
+			MoveFileExW(Utf8toUtf16(sTmp.c_str()).c_str(), Utf8toUtf16(sPath.c_str()).c_str(), MOVEFILE_REPLACE_EXISTING) ||
+			(GetLastError() == ERROR_FILE_NOT_FOUND);
+#else // WIN32
+		bOk =
+			!rename(sTmp.c_str(), sPath.c_str()) ||
+			(ENOENT == errno);
+#endif // WIN32
+	}
+
+	if (bOk) {
+		LOG_INFO() << "Recovery generation done";
+		m_Processor.get_DB().ParamSet(NodeDB::ParamID::LastRecoveryHeight, &h1, nullptr);
+	} else
+	{
+		LOG_INFO() << "Recovery generation failed";
+		beam::DeleteFile(sTmp.c_str());
+	}
 }
 
 void Node::Processor::OnRolledBack()
@@ -626,7 +707,13 @@ void Node::Processor::OnRolledBack()
 
 uint32_t Node::Processor::TaskProcessor::get_Threads()
 {
-	uint32_t nThreads = get_ParentObj().get_ParentObj().m_Cfg.m_VerificationThreads;
+	Config& cfg = get_ParentObj().get_ParentObj().m_Cfg; // alias
+
+	if (cfg.m_VerificationThreads < 0)
+		// use all the cores, don't subtract 'mining threads'. Verification has higher priority
+		cfg.m_VerificationThreads = std::thread::hardware_concurrency();
+
+	uint32_t nThreads = cfg.m_VerificationThreads;
 	return std::max(nThreads, 1U);
 }
 
@@ -719,7 +806,6 @@ void Node::Processor::TaskProcessor::Stop()
 void Node::Processor::TaskProcessor::Thread(uint32_t)
 {
 	std::unique_ptr<MyBatch> p(new MyBatch);
-	p->m_bEnableBatch = true;
 	MyBatch::Scope scopeBatch(*p);
 
 	while (true)
@@ -815,17 +901,29 @@ void Node::Processor::OnGoUpTimer()
 	get_ParentObj().UpdateSyncStatus();
 }
 
+void Node::Processor::Stop()
+{
+    m_TaskProcessor.Stop();
+    m_bGoUpPending = false;
+    m_bFlushPending = false;
+
+    if (m_pGoUpTimer)
+    {
+        m_pGoUpTimer->cancel();
+    }
+
+    if (m_pFlushTimer)
+    {
+        m_pFlushTimer->cancel();
+    }
+}
+
 bool Node::Processor::EnumViewerKeys(IKeyWalker& w)
 {
     const Keys& keys = get_ParentObj().m_Keys;
 
     // according to current design - a single master viewer key is enough
 	if (keys.m_pOwner && !w.OnKey(*keys.m_pOwner, 0)) {
-		// stupid compiler insists on parentheses here!
-		return false;
-	}
-
-	if (keys.m_bRecoverViaDummyKey && !w.OnKey(*keys.m_pOwner, 1)) {
 		// stupid compiler insists on parentheses here!
 		return false;
 	}
@@ -909,7 +1007,6 @@ void Node::Keys::SetSingleKey(const Key::IKdf::Ptr& pKdf)
     m_nMinerSubIndex = 0;
     m_pMiner = pKdf;
     m_pGeneric = pKdf;
-    m_pDummy = pKdf;
     m_pOwner = pKdf;
 }
 
@@ -918,9 +1015,14 @@ void Node::Initialize(IExternalPOW* externalPOW)
     m_Processor.m_Horizon = m_Cfg.m_Horizon;
     m_Processor.Initialize(m_Cfg.m_sPathLocal.c_str(), m_Cfg.m_ProcessorParams);
 
-    if (m_Cfg.m_VerificationThreads < 0)
-        // use all the cores, don't subtract 'mining threads'. Verification has higher priority
-        m_Cfg.m_VerificationThreads = std::thread::hardware_concurrency();
+	if (m_Cfg.m_ProcessorParams.m_EraseSelfID)
+	{
+		m_Processor.get_DB().ParamSet(NodeDB::ParamID::MyID, nullptr, nullptr);
+		LOG_INFO() << "Node ID erased";
+
+		io::Reactor::get_Current().stop();
+		return;
+	}
 
     InitKeys();
     InitIDs();
@@ -948,16 +1050,34 @@ void Node::Initialize(IExternalPOW* externalPOW)
 
     m_PeerMan.Initialize();
     m_Miner.Initialize(externalPOW);
+	m_Processor.get_DB().get_BbsTotals(m_Bbs.m_Totals);
     m_Bbs.Cleanup();
 	m_Bbs.m_HighestPosted_s = m_Processor.get_DB().get_BbsMaxTime();
 
 	m_Processor.OnHorizonChanged(); // invoke it once again, after the Compressor initialized and maybe deleted some of backlog, perhaps fossil height may go up
 }
 
+uint32_t Node::get_AcessiblePeerCount() const
+{
+	return static_cast<uint32_t>(m_PeerMan.get_Addrs().size());
+}
+
 void Node::InitKeys()
 {
-    if (!m_Keys.m_pOwner)
-        m_Keys.m_pMiner = NULL; // can't mine without owner view key, because it's used for Tagging
+	if (m_Keys.m_pOwner)
+	{
+		// Ensure the miner key makes sense.
+		if (m_Keys.m_pMiner && m_Keys.m_nMinerSubIndex && m_Keys.m_pOwner->IsSame(*m_Keys.m_pMiner))
+		{
+			// BB2.1
+			CorruptionException exc;
+			exc.m_sErr = "Incompatible miner key. Please regenerate with the latest version";
+			throw exc;
+
+		}
+	}
+	else
+        m_Keys.m_pMiner = nullptr; // can't mine without owner view key, because it's used for Tagging
 
     if (!m_Keys.m_pGeneric)
     {
@@ -979,7 +1099,9 @@ void Node::InitIDs()
 
     ECC::NoLeak<ECC::Scalar> s;
     Blob blob(s.V.m_Value);
-    bool bNewID = !m_Processor.get_DB().ParamGet(NodeDB::ParamID::MyID, NULL, &blob);
+    bool bNewID =
+		m_Cfg.m_ProcessorParams.m_ResetSelfID ||
+		!m_Processor.get_DB().ParamGet(NodeDB::ParamID::MyID, NULL, &blob);
 
     if (bNewID)
     {
@@ -991,67 +1113,82 @@ void Node::InitIDs()
         m_MyPrivateID = s.V;
 
     proto::Sk2Pk(m_MyPublicID, m_MyPrivateID);
-
-    if (!m_Keys.m_pDummy)
-    {
-        // create it using Node-ID
-        ECC::NoLeak<ECC::Hash::Value> hv;
-        ECC::Hash::Processor() << m_MyPrivateID >> hv.V;
-
-        std::shared_ptr<ECC::HKdf> pKdf = std::make_shared<ECC::HKdf>();
-        pKdf->Generate(hv.V);
-        m_Keys.m_pDummy = std::move(pKdf);
-    }
-
 }
 
 void Node::RefreshOwnedUtxos()
 {
 	ECC::Hash::Processor hp;
-	if (m_Keys.m_pDummy)
-	{
-		ECC::Scalar::Native sk;
-		m_Keys.m_pDummy->DeriveKey(sk, Key::ID(0, Key::Type::Decoy));
-		hp << sk;
-	}
+
+	ECC::Hash::Value hv0, hv1(Zero);
 
 	if (m_Keys.m_pOwner)
 	{
-		ECC::uintBig hv(Zero);
 		ECC::Scalar::Native sk;
-		m_Keys.m_pOwner->DerivePKey(sk, hv);
+		m_Keys.m_pOwner->DerivePKey(sk, hv1);
 		hp << sk;
+
+		if (m_Keys.m_pMiner)
+		{
+			// rescan also when miner subkey changes, to recover possible decoys that were rejected earlier
+			m_Keys.m_pMiner->DerivePKey(sk, hv1);
+			hp
+				<< m_Keys.m_nMinerSubIndex
+				<< sk;
+		}
 	}
 
-	ECC::Hash::Value hv0, hv1(Zero);
 	hp >> hv0;
 
 	Blob blob(hv1);
 	m_Processor.get_DB().ParamGet(NodeDB::ParamID::DummyID, NULL, &blob);
 
 	if (hv0 == hv1)
-		return; // unchaged
-
-	if (m_Keys.m_pDummy && !(m_Keys.m_pOwner && m_Keys.m_pOwner->IsSame(*m_Keys.m_pDummy)))
-		m_Keys.m_bRecoverViaDummyKey = true;
+		return; // unchanged
 
 	m_Processor.RescanOwnedTxos();
-	m_Keys.m_bRecoverViaDummyKey = false;
 
 	blob = Blob(hv0);
 	m_Processor.get_DB().ParamSet(NodeDB::ParamID::DummyID, NULL, &blob);
 }
 
+bool Node::Bbs::IsInLimits() const
+{
+	const NodeDB::BbsTotals& lims = get_ParentObj().m_Cfg.m_Bbs.m_Limit;
+
+	return
+		(m_Totals.m_Count <= lims.m_Count) &&
+		(m_Totals.m_Size <= lims.m_Size);
+}
+
 void Node::Bbs::Cleanup()
 {
-    get_ParentObj().m_Processor.get_DB().BbsDelOld(getTimestamp() - get_ParentObj().m_Cfg.m_Timeout.m_BbsMessageTimeout_s);
+	NodeDB& db = get_ParentObj().m_Processor.get_DB();
+	NodeDB::WalkerBbsTimeLen wlk(db);
+
+	Timestamp ts = getTimestamp() - get_ParentObj().m_Cfg.m_Bbs.m_MessageTimeout_s;
+
+	for (db.EnumAllBbs(wlk); wlk.MoveNext(); )
+	{
+		if (IsInLimits() && (wlk.m_Time >= ts))
+			break;
+
+		db.BbsDel(wlk.m_ID);
+		m_Totals.m_Count--;
+		m_Totals.m_Size -= wlk.m_Size;
+	}
+
+	m_LastCleanup_ms = GetTime_ms();
 }
 
 void Node::Bbs::MaybeCleanup()
 {
-    uint32_t dt_ms = GetTime_ms() - m_LastCleanup_ms;
-    if (dt_ms >= get_ParentObj().m_Cfg.m_Timeout.m_BbsCleanupPeriod_ms)
-        Cleanup();
+	if (IsInLimits())
+	{
+		uint32_t dt_ms = GetTime_ms() - m_LastCleanup_ms;
+		if (dt_ms < get_ParentObj().m_Cfg.m_Bbs.m_CleanupPeriod_ms)
+			return;
+	}
+	Cleanup();
 }
 
 Node::~Node()
@@ -1084,7 +1221,7 @@ Node::~Node()
 
     assert(m_setTasks.empty());
 
-	m_Processor.m_TaskProcessor.Stop();
+	m_Processor.Stop();
 
 	if (!std::uncaught_exceptions())
 		m_PeerMan.OnFlush();
@@ -1142,6 +1279,9 @@ void Node::Peer::OnResendPeers()
 		if (!pi.m_LastSeen)
 			continue; // recommend only verified peers
 
+		if (pi.m_Addr.m_Value.empty())
+			continue; // address unknown, can't recommend
+
         proto::PeerInfo msg;
         msg.m_ID = pi.m_ID.m_Key;
         msg.m_LastAddr = pi.m_Addr.m_Value;
@@ -1182,23 +1322,20 @@ void Node::Peer::OnConnectedSecure()
     }
 }
 
-void Node::Peer::SendLogin()
+void Node::Peer::SetupLogin(proto::Login& msg)
 {
-	proto::Login msgLogin;
-	msgLogin.m_CfgChecksum = Rules::get().Checksum; // checksum of all consesnsus related configuration
-
-	msgLogin.m_Flags =
-		proto::LoginFlags::Extension1 |
-		proto::LoginFlags::Extension2 |
-		proto::LoginFlags::SendPeers; // request a another node to periodically send a list of recommended peers
+	msg.m_Flags |= proto::LoginFlags::SendPeers; // request a another node to periodically send a list of recommended peers
 
 	if (m_This.m_PostStartSynced)
-		msgLogin.m_Flags |= proto::LoginFlags::SpreadingTransactions; // indicate ability to receive and broadcast transactions
+		msg.m_Flags |= proto::LoginFlags::SpreadingTransactions; // indicate ability to receive and broadcast transactions
 
-	if (m_This.m_Cfg.m_Bbs)
-		msgLogin.m_Flags |= proto::LoginFlags::Bbs; // indicate ability to receive and broadcast BBS messages
+	if (m_This.m_Cfg.m_Bbs.IsEnabled())
+		msg.m_Flags |= proto::LoginFlags::Bbs; // indicate ability to receive and broadcast BBS messages
+}
 
-	Send(msgLogin);
+Height Node::Peer::get_MinPeerFork()
+{
+	return m_This.m_Processor.m_Cursor.m_ID.m_Height + 1;
 }
 
 void Node::Peer::OnMsg(proto::Authentication&& msg)
@@ -1213,13 +1350,23 @@ void Node::Peer::OnMsg(proto::Authentication&& msg)
         Key::IPKdf* pOwner = m_This.m_Keys.m_pOwner.get();
         if (pOwner && IsKdfObscured(*pOwner, msg.m_ID))
         {
-            m_Flags |= Flags::Owner;
+            m_Flags |= Flags::Owner | Flags::Viewer;
             ProvePKdfObscured(*pOwner, proto::IDType::Viewer);
         }
 
         if (!b && ShouldFinalizeMining())
             m_This.m_Miner.OnFinalizerChanged(this);
     }
+
+	if (proto::IDType::Viewer == msg.m_IDType)
+	{
+		Key::IPKdf* pOwner = m_This.m_Keys.m_pOwner.get();
+		if (pOwner && IsPKdfObscured(*pOwner, msg.m_ID))
+		{
+			m_Flags |= Flags::Viewer;
+			ProvePKdfObscured(*pOwner, proto::IDType::Viewer);
+		}
+	}
 
     if (proto::IDType::Node != msg.m_IDType)
         return;
@@ -1366,6 +1513,11 @@ void Node::Peer::OnDisconnect(const DisconnectReason& dr)
         break;
 
     case DisconnectReason::ProcessingExc:
+        if (dr.m_ExceptionDetails.m_ExceptionType == proto::NodeProcessingException::Type::TimeOutOfSync)
+        {
+            m_This.m_Cfg.m_Observer->OnSyncError(IObserver::Error::TimeDiffToLarge);
+        }
+        // no break;
     case DisconnectReason::Protocol:
         nByeReason = ByeReason::Ban;
         break;
@@ -1385,13 +1537,13 @@ void Node::Peer::ReleaseTask(Task& t)
     assert(this == t.m_pOwner);
     t.m_pOwner = NULL;
 
-    if (t.m_bPack)
+    if (t.m_nCount)
     {
         uint32_t& nCounter = t.m_Key.second ? m_This.m_nTasksPackBody : m_This.m_nTasksPackHdr;
-        assert(nCounter);
+        assert(nCounter >= t.m_nCount);
 
-        nCounter--;
-        t.m_bPack = false;
+        nCounter -= t.m_nCount;
+		t.m_nCount = 0;
     }
 
     m_lstTasks.erase(TaskList::s_iterator_to(t));
@@ -1521,7 +1673,9 @@ void Node::Peer::OnMsg(proto::NewTip&& msg)
         switch (p.OnState(m_Tip, m_pInfo->m_ID.m_Key))
         {
         case NodeProcessor::DataStatus::Invalid:
-            ThrowUnexpected();
+            m_Tip.m_TimeStamp > getTimestamp() ?
+                m_This.m_Cfg.m_Observer->OnSyncError(IObserver::Error::TimeDiffToLarge):
+                ThrowUnexpected();
             // no break;
 
         case NodeProcessor::DataStatus::Accepted:
@@ -1536,7 +1690,6 @@ void Node::Peer::OnMsg(proto::NewTip&& msg)
         default:
             break; // suppress warning
         }
-
     }
 
 	TakeTasks();
@@ -1562,7 +1715,9 @@ void Node::Peer::OnFirstTaskDone()
     ReleaseTask(get_FirstTask());
     SetTimerWrtFirstTask();
 
-    TakeTasks(); // maybe can take more
+	// Refrain from using TakeTasks(), it will only try to assign tasks to this peer
+	m_This.RefreshCongestions();
+	m_This.m_Processor.TryGoUpAsync();
 }
 
 void Node::Peer::OnMsg(proto::DataMissing&&)
@@ -1592,7 +1747,7 @@ void Node::Peer::OnMsg(proto::Hdr&& msg)
 {
     Task& t = get_FirstTask();
 
-    if (t.m_Key.second || t.m_bPack)
+    if (t.m_Key.second || (t.m_nCount != 1))
         ThrowUnexpected();
 
     Block::SystemState::ID id;
@@ -1649,7 +1804,7 @@ void Node::Peer::OnMsg(proto::HdrPack&& msg)
 {
     Task& t = get_FirstTask();
 
-    if (t.m_Key.second || !t.m_bPack)
+    if (t.m_Key.second || !t.m_nCount)
         ThrowUnexpected();
 
     if (msg.m_vElements.empty() || (msg.m_vElements.size() > proto::g_HdrPackMaxSize))
@@ -1700,8 +1855,6 @@ void Node::Peer::OnMsg(proto::HdrPack&& msg)
     {
         assert((Flags::PiRcvd & m_Flags) && m_pInfo);
         m_This.m_PeerMan.ModifyRating(*m_pInfo, PeerMan::Rating::RewardHeader * nAccepted, true);
-
-        m_This.RefreshCongestions(); // may delete us
     }
     else
     {
@@ -1750,10 +1903,7 @@ void Node::Peer::OnMsg(proto::GetBodyPack&& msg)
 						sid.m_Row = p.FindActiveAtStrict(sid.m_Height);
 
 						proto::BodyBuffers bb;
-						if (!p.GetBlock(sid,
-							msg.m_ExcludeE ? nullptr : &bb.m_Eternal,
-							msg.m_ExcludeP ? nullptr : &bb.m_Perishable,
-							msg.m_Height0, msg.m_HorizonLo1, msg.m_HorizonHi1))
+						if (!GetBlock(bb, sid, msg))
 							break;
 
 						nSize += bb.m_Eternal.size() + bb.m_Perishable.size();
@@ -1773,10 +1923,7 @@ void Node::Peer::OnMsg(proto::GetBodyPack&& msg)
 			else
 			{
 				proto::Body msgBody;
-				if (p.GetBlock(sid,
-					msg.m_ExcludeE ? nullptr : &msgBody.m_Body.m_Eternal,
-					msg.m_ExcludeP ? nullptr : &msgBody.m_Body.m_Perishable,
-					msg.m_Height0, msg.m_HorizonLo1, msg.m_HorizonHi1))
+				if (GetBlock(msgBody.m_Body, sid, msg))
 				{
 					Send(msgBody);
 					return;
@@ -1799,6 +1946,59 @@ void Node::Peer::OnMsg(proto::GetBodyPack&& msg)
 
     proto::DataMissing msgMiss(Zero);
     Send(msgMiss);
+}
+
+bool Node::Peer::GetBlock(proto::BodyBuffers& out, const NodeDB::StateID& sid, const proto::GetBodyPack& msg)
+{
+	ByteBuffer* pP = nullptr;
+	ByteBuffer* pE = nullptr;
+
+	switch (msg.m_FlagE)
+	{
+	case proto::BodyBuffers::Full:
+		pE = &out.m_Eternal;
+		// no break;
+	case proto::BodyBuffers::None:
+		break;
+	default:
+		ThrowUnexpected();
+	}
+
+	switch (msg.m_FlagP)
+	{
+	case proto::BodyBuffers::Recovery1:
+	case proto::BodyBuffers::Full:
+		pP = &out.m_Perishable;
+		// no break;
+	case proto::BodyBuffers::None:
+		break;
+	default:
+		ThrowUnexpected();
+	}
+
+	if (!m_This.m_Processor.GetBlock(sid, pE, pP, msg.m_Height0, msg.m_HorizonLo1, msg.m_HorizonHi1))
+		return false;
+
+	if (proto::BodyBuffers::Recovery1 == msg.m_FlagP)
+	{
+		Block::Body block;
+
+		Deserializer der;
+		der.reset(out.m_Perishable);
+		der & Cast::Down<Block::BodyBase>(block);
+		der & Cast::Down<TxVectors::Perishable>(block);
+
+		for (size_t i = 0; i < block.m_vOutputs.size(); i++)
+			block.m_vOutputs[i]->m_RecoveryOnly = true;
+
+		Serializer ser;
+		ser & Cast::Down<Block::BodyBase>(block);
+		ser & Cast::Down<TxVectors::Perishable>(block);
+
+		ser.swap_buf(out.m_Perishable);
+	}
+
+	return true;
 }
 
 void Node::Peer::OnMsg(proto::Body&& msg)
@@ -1828,7 +2028,7 @@ void Node::Peer::OnMsg(proto::BodyPack&& msg)
 {
 	Task& t = get_FirstTask();
 
-	if (!t.m_Key.second || !t.m_bPack)
+	if (!t.m_Key.second || !t.m_nCount)
 		ThrowUnexpected();
 
 	const Block::SystemState::ID& id = t.m_Key.first;
@@ -1882,9 +2082,6 @@ void Node::Peer::OnFirstTaskDone(NodeProcessor::DataStatus::Enum eStatus)
 
     get_FirstTask().m_bNeeded = false;
     OnFirstTaskDone();
-
-    if (NodeProcessor::DataStatus::Accepted == eStatus)
-        m_This.RefreshCongestions();
 }
 
 void Node::Peer::OnMsg(proto::NewTransaction&& msg)
@@ -1897,21 +2094,39 @@ void Node::Peer::OnMsg(proto::NewTransaction&& msg)
         m_This.OnTransactionFluff(std::move(msg.m_Transaction), this, NULL);
     else
     {
-        proto::Boolean msgOut;
-        msgOut.m_Value = m_This.OnTransactionStem(std::move(msg.m_Transaction), this);
+        proto::Status msgOut;
+		msgOut.m_Value = m_This.OnTransactionStem(std::move(msg.m_Transaction), this);
+
+		if (!(proto::LoginFlags::Extension3 & m_LoginFlags) && (proto::TxStatus::Ok != msgOut.m_Value))
+			msgOut.m_Value = proto::TxStatus::Unspecified; // legacy client
+
         Send(msgOut);
     }
 }
 
-bool Node::ValidateTx(Transaction::Context& ctx, const Transaction& tx)
+uint8_t Node::ValidateTx(Transaction::Context& ctx, const Transaction& tx)
 {
-    return
-        m_Processor.ValidateAndSummarize(ctx, tx, tx.get_Reader()) &&
-        ctx.IsValidTransaction() &&
-        m_Processor.ValidateTxContext(tx);
+	ctx.m_Height.m_Min = m_Processor.m_Cursor.m_ID.m_Height + 1;
+
+	if (!(m_Processor.ValidateAndSummarize(ctx, tx, tx.get_Reader()) && ctx.IsValidTransaction()))
+		return proto::TxStatus::Invalid;
+
+	if (!m_Processor.ValidateTxContext(tx, ctx.m_Height))
+		return proto::TxStatus::InvalidContext;
+
+	if (ctx.m_Height.m_Min >= Rules::get().pForks[1].m_Height)
+	{
+		Transaction::FeeSettings feeSettings;
+		AmountBig::Type fees = feeSettings.Calculate(tx);
+
+		if (ctx.m_Fee < fees)
+			return proto::TxStatus::LowFee;
+	}
+
+	return proto::TxStatus::Ok;
 }
 
-void Node::LogTx(const Transaction& tx, bool bValid, const Transaction::KeyType& key)
+void Node::LogTx(const Transaction& tx, uint8_t nStatus, const Transaction::KeyType& key)
 {
     std::ostringstream os;
 
@@ -1944,7 +2159,7 @@ void Node::LogTx(const Transaction& tx, bool bValid, const Transaction::KeyType&
         os << "\n\tK: " << sz << " Fee=" << krn.m_Fee;
     }
 
-    os << "\n\tValid: " << bValid;
+    os << "\n\tStatus: " << static_cast<uint32_t>(nStatus);
     LOG_INFO() << os.str();
 }
 
@@ -1980,15 +2195,11 @@ uint32_t Node::RandomUInt32(uint32_t threshold)
     return threshold;
 }
 
-void CmpTx(const Transaction& tx1, const Transaction& tx2, bool& b1Covers, bool& b2Covers)
-{
-}
-
-bool Node::OnTransactionStem(Transaction::Ptr&& ptx, const Peer* pPeer)
+uint8_t Node::OnTransactionStem(Transaction::Ptr&& ptx, const Peer* pPeer)
 {
 	if (ptx->m_vInputs.empty() || ptx->m_vKernels.empty()) {
 		// stupid compiler insists on parentheses here!
-		return false;
+		return proto::TxStatus::TooSmall;
 	}
 
 	Transaction::Context::Params pars;
@@ -2013,29 +2224,38 @@ bool Node::OnTransactionStem(Transaction::Ptr&& ptx, const Peer* pPeer)
         pElem->m_pValue->get_Reader().Compare(std::move(ptx->get_Reader()), bElemCovers, bNewCovers);
 
         if (!bNewCovers)
-            return false; // the new tx is reduced, drop it
+            return proto::TxStatus::Obscured; // the new tx is reduced, drop it
 
         if (bElemCovers)
         {
             pDup = pElem; // exact match
 
             if (pDup->m_bAggregating)
-                return true; // it shouldn't have been received, but nevermind, just ignore
+                return proto::TxStatus::Ok; // it shouldn't have been received, but nevermind, just ignore
 
             break;
         }
 
-        if (!bTested && !ValidateTx(ctx, *ptx))
-            return false;
-        bTested = true;
+		if (!bTested)
+		{
+			uint8_t nCode = ValidateTx(ctx, *ptx);
+			if (proto::TxStatus::Ok != nCode)
+				return nCode;
+
+			bTested = true;
+		}
 
         m_Dandelion.Delete(*pElem);
     }
 
     if (!pDup)
     {
-        if (!bTested && !ValidateTx(ctx, *ptx))
-            return false;
+		if (!bTested)
+		{
+			uint8_t nCode = ValidateTx(ctx, *ptx);
+			if (proto::TxStatus::Ok != nCode)
+				return nCode;
+		}
 
         AddDummyInputs(*ptx);
 
@@ -2045,6 +2265,7 @@ bool Node::OnTransactionStem(Transaction::Ptr&& ptx, const Peer* pPeer)
         pGuard->m_Profit.m_Fee = ctx.m_Fee;
         pGuard->m_Profit.SetSize(*ptx);
         pGuard->m_pValue.swap(ptx);
+		pGuard->m_Height = ctx.m_Height;
 
         m_Dandelion.InsertKrn(*pGuard);
 
@@ -2053,7 +2274,7 @@ bool Node::OnTransactionStem(Transaction::Ptr&& ptx, const Peer* pPeer)
 
     assert(!pDup->m_bAggregating);
 
-    if (pDup->m_pValue->m_vOutputs.size() > m_Cfg.m_Dandelion.m_OutputsMax)
+    if ((pDup->m_pValue->m_vOutputs.size() >= m_Cfg.m_Dandelion.m_OutputsMax) || !m_Keys.m_pMiner)
         OnTransactionAggregated(*pDup);
     else
     {
@@ -2061,7 +2282,7 @@ bool Node::OnTransactionStem(Transaction::Ptr&& ptx, const Peer* pPeer)
         PerformAggregation(*pDup);
     }
 
-    return true;
+    return proto::TxStatus::Ok;
 }
 
 void Node::OnTransactionAggregated(TxPool::Stem::Element& x)
@@ -2152,6 +2373,9 @@ void Node::PerformAggregation(TxPool::Stem::Element& x)
 
 void Node::AddDummyInputs(Transaction& tx)
 {
+	if (!m_Keys.m_pMiner)
+		return;
+
     bool bModified = false;
 
     while (tx.m_vInputs.size() < m_Cfg.m_Dandelion.m_OutputsMax)
@@ -2161,54 +2385,19 @@ void Node::AddDummyInputs(Transaction& tx)
         if (h > m_Processor.m_Cursor.m_ID.m_Height)
             break;
 
+		bModified = true;
 		kidv.m_Value = 0;
-        bModified = true;
 
-        // ECC::Mode::Scope scope(ECC::Mode::Fast);
-
-        ECC::Scalar::Native sk;
-
-        // bounds
-        UtxoTree::Key kMin, kMax;
-
-        UtxoTree::Key::Data d;
-        SwitchCommitment().Create(sk, d.m_Commitment, *m_Keys.m_pDummy, kidv);
-        d.m_Maturity = 0;
-        kMin = d;
-
-        d.m_Maturity = m_Processor.m_Cursor.m_ID.m_Height;
-        kMax = d;
-
-        // check if it's still unspent
-        struct Traveler :public UtxoTree::ITraveler {
-            virtual bool OnLeaf(const RadixTree::Leaf& x) override {
-                return false;
-            }
-        } t;
-
-        UtxoTree::Cursor cu;
-        t.m_pCu = &cu;
-        t.m_pBound[0] = kMin.m_pArr;
-        t.m_pBound[1] = kMax.m_pArr;
-
-        if (m_Processor.get_Utxos().Traverse(t))
-        {
-            // spent
-            m_Processor.get_DB().DeleteDummy(kidv);
-        }
-        else
-        {
-            // unspent
-            Input::Ptr pInp(new Input);
-            pInp->m_Commitment = d.m_Commitment;
-
-            tx.m_vInputs.push_back(std::move(pInp));
-            tx.m_Offset = ECC::Scalar::Native(tx.m_Offset) + ECC::Scalar::Native(sk);
-
-            /// in the (unlikely) case the tx will be lost - we'll retry spending this UTXO after the following num of blocks
-            m_Processor.get_DB().SetDummyHeight(kidv, m_Processor.m_Cursor.m_ID.m_Height + m_Cfg.m_Dandelion.m_DummyLifetimeLo + 1);
-        }
-
+		if (AddDummyInputEx(tx, kidv))
+		{
+			/// in the (unlikely) case the tx will be lost - we'll retry spending this UTXO after the following num of blocks
+			m_Processor.get_DB().SetDummyHeight(kidv, m_Processor.m_Cursor.m_ID.m_Height + m_Cfg.m_Dandelion.m_DummyLifetimeLo + 1);
+		}
+		else
+		{
+			// spent
+			m_Processor.get_DB().DeleteDummy(kidv);
+		}
     }
 
     if (bModified)
@@ -2218,9 +2407,62 @@ void Node::AddDummyInputs(Transaction& tx)
     }
 }
 
+bool Node::AddDummyInputEx(Transaction& tx, const Key::IDV& kidv)
+{
+	if (AddDummyInputRaw(tx, kidv))
+		return true;
+
+	// try workaround
+	if (!kidv.IsBb21Possible())
+		return false;
+
+	Key::IDV kidv2 = kidv;
+	kidv2.set_WorkaroundBb21();
+	return AddDummyInputRaw(tx, kidv2);
+
+}
+
+bool Node::AddDummyInputRaw(Transaction& tx, const Key::IDV& kidv)
+{
+	assert(m_Keys.m_pMiner);
+
+	Key::IKdf::Ptr pChild;
+	Key::IKdf* pKdf = nullptr;
+
+	if (kidv.get_Subkey() == m_Keys.m_nMinerSubIndex)
+		pKdf = m_Keys.m_pMiner.get();
+	else
+	{
+		// was created by other miner. If we have the root key - we can recreate its key
+		if (m_Keys.m_nMinerSubIndex)
+			return false;
+
+		pChild = MasterKey::get_Child(m_Keys.m_pMiner, kidv);
+		pKdf = pChild.get();
+	}
+
+	ECC::Scalar::Native sk;
+
+	// bounds
+	ECC::Point comm;
+	SwitchCommitment().Create(sk, comm, *pKdf, kidv);
+
+	if (!m_Processor.ValidateInputs(comm))
+		return false;
+
+	// unspent
+	Input::Ptr pInp(new Input);
+	pInp->m_Commitment = comm;
+
+	tx.m_vInputs.push_back(std::move(pInp));
+	tx.m_Offset = ECC::Scalar::Native(tx.m_Offset) + ECC::Scalar::Native(sk);
+
+	return true;
+}
+
 void Node::AddDummyOutputs(Transaction& tx)
 {
-    if (!m_Cfg.m_Dandelion.m_DummyLifetimeHi)
+    if (!m_Cfg.m_Dandelion.m_DummyLifetimeHi || !m_Keys.m_pMiner)
         return;
 
     // add dummy outputs
@@ -2232,6 +2474,7 @@ void Node::AddDummyOutputs(Transaction& tx)
     {
 		Key::IDV kidv(Zero);
 		kidv.m_Type = Key::Type::Decoy;
+		kidv.set_Subkey(m_Keys.m_nMinerSubIndex);
 
 		while (true)
 		{
@@ -2244,7 +2487,7 @@ void Node::AddDummyOutputs(Transaction& tx)
 
         Output::Ptr pOutput(new Output);
         ECC::Scalar::Native sk;
-        pOutput->Create(sk, *m_Keys.m_pDummy, kidv, *m_Keys.m_pDummy);
+        pOutput->Create(m_Processor.m_Cursor.m_ID.m_Height + 1, sk, *m_Keys.m_pMiner, kidv, *m_Keys.m_pOwner);
 
 		Height h = SampleDummySpentHeight();
         db.InsertDummy(h, kidv);
@@ -2283,7 +2526,11 @@ bool Node::OnTransactionFluff(Transaction::Ptr&& ptxArg, const Peer* pPeer, TxPo
 	Transaction::Context ctx(pars);
     if (pElem)
     {
+		if (!pElem->m_Height.IsInRange(m_Processor.m_Cursor.m_ID.m_Height + 1))
+			return false;
+
         ctx.m_Fee = pElem->m_Profit.m_Fee;
+		ctx.m_Height = pElem->m_Height;
         m_Dandelion.Delete(*pElem);
     }
     else
@@ -2312,10 +2559,10 @@ bool Node::OnTransactionFluff(Transaction::Ptr&& ptxArg, const Peer* pPeer, TxPo
     m_Wtx.Delete(key.m_Key);
 
     // new transaction
-    bool bValid = pElem ? true: ValidateTx(ctx, tx);
-    LogTx(tx, bValid, key.m_Key);
+    uint8_t nCode = pElem ? proto::TxStatus::Ok : ValidateTx(ctx, tx);
+    LogTx(tx, nCode, key.m_Key);
 
-	if (!bValid) {
+	if (proto::TxStatus::Ok != nCode) {
 		return false; // stupid compiler insists on parentheses here!
 	}
 
@@ -2364,15 +2611,13 @@ void Node::Dandelion::OnTimedOut(Element& x)
         get_ParentObj().OnTransactionFluff(std::move(x.m_pValue), NULL, &x);
 }
 
-bool Node::Dandelion::ValidateTxContext(const Transaction& tx)
+bool Node::Dandelion::ValidateTxContext(const Transaction& tx, const HeightRange& hr)
 {
-    return get_ParentObj().m_Processor.ValidateTxContext(tx);
+    return get_ParentObj().m_Processor.ValidateTxContext(tx, hr);
 }
 
-void Node::Peer::OnMsg(proto::Login&& msg)
+void Node::Peer::OnLogin(proto::Login&& msg)
 {
-    VerifyCfg(msg);
-
     if ((m_LoginFlags ^ msg.m_Flags) & proto::LoginFlags::SendPeers)
     {
         if (msg.m_Flags & proto::LoginFlags::SendPeers)
@@ -2391,7 +2636,7 @@ void Node::Peer::OnMsg(proto::Login&& msg)
 
     bool b = ShouldFinalizeMining();
 
-	if (m_This.m_Cfg.m_Bbs &&
+	if (m_This.m_Cfg.m_Bbs.IsEnabled() &&
 		!(proto::LoginFlags::Bbs & m_LoginFlags) &&
 		(proto::LoginFlags::Bbs & msg.m_Flags))
 	{
@@ -2400,7 +2645,7 @@ void Node::Peer::OnMsg(proto::Login&& msg)
 		Send(msgOut);
 	}
 
-    m_LoginFlags = msg.m_Flags;
+    m_LoginFlags = static_cast<uint8_t>(msg.m_Flags);
 
 	if (b != ShouldFinalizeMining()) {
 		// stupid compiler insists on parentheses!
@@ -2685,8 +2930,8 @@ void Node::Peer::OnMsg(proto::GetProofUtxo&& msg)
 		d.m_Maturity = Height(-1);
 		kMax = d;
 
-		t.m_pBound[0] = kMin.m_pArr;
-		t.m_pBound[1] = kMax.m_pArr;
+		t.m_pBound[0] = kMin.V.m_pData;
+		t.m_pBound[1] = kMax.V.m_pData;
 
 		t.m_pTree->Traverse(t);
 	}
@@ -2737,7 +2982,7 @@ void Node::Peer::OnMsg(proto::GetProofChainWork&& msg)
     if (!p.IsFastSync() && p.BuildCwp())
     {
         msgOut.m_Proof.m_LowerBound = msg.m_LowerBound;
-        verify(msgOut.m_Proof.Crop(p.m_Cwp));
+        BEAM_VERIFY(msgOut.m_Proof.Crop(p.m_Cwp));
     }
 
     Send(msgOut);
@@ -2763,7 +3008,7 @@ void Node::Peer::OnMsg(proto::GetExternalAddr&& msg)
 
 void Node::Peer::OnMsg(proto::BbsMsgV0&& msg0)
 {
-	if (!m_This.m_Cfg.m_BbsAllowV0)
+	if (m_This.m_Processor.m_Cursor.m_ID.m_Height >= Rules::get().pForks[1].m_Height && !Rules::get().FakePoW)
 		return; // drop
 
 	proto::BbsMsg msg;
@@ -2776,7 +3021,7 @@ void Node::Peer::OnMsg(proto::BbsMsgV0&& msg0)
 
 void Node::Peer::OnMsg(proto::BbsMsg&& msg)
 {
-	if (!m_This.m_Cfg.m_BbsAllowV0)
+	if ((m_This.m_Processor.m_Cursor.m_ID.m_Height >= Rules::get().pForks[1].m_Height) && !Rules::get().FakePoW)
 	{
 		// test the hash
 		ECC::Hash::Value hv;
@@ -2791,7 +3036,7 @@ void Node::Peer::OnMsg(proto::BbsMsg&& msg)
 
 void Node::Peer::OnMsg(const proto::BbsMsg& msg, bool bNonceValid)
 {
-	if (!m_This.m_Cfg.m_Bbs)
+	if (!m_This.m_Cfg.m_Bbs.IsEnabled())
 		ThrowUnexpected();
 
 	if (msg.m_Message.size() > proto::Bbs::s_MaxMsgSize)
@@ -2802,7 +3047,7 @@ void Node::Peer::OnMsg(const proto::BbsMsg& msg, bool bNonceValid)
 	if (msg.m_TimePosted > t + Rules::get().DA.MaxAhead_s)
 		return; // too much ahead of time
 
-	if (msg.m_TimePosted + m_This.m_Cfg.m_Timeout.m_BbsMessageTimeout_s  < t)
+	if (msg.m_TimePosted + m_This.m_Cfg.m_Bbs.m_MessageTimeout_s  < t)
 		return; // too old
 
 	if (msg.m_TimePosted + Rules::get().DA.MaxAhead_s < m_This.m_Bbs.m_HighestPosted_s)
@@ -2828,6 +3073,8 @@ void Node::Peer::OnMsg(const proto::BbsMsg& msg, bool bNonceValid)
     m_This.m_Bbs.m_W.Delete(wlk.m_Data.m_Key);
 
 	m_This.m_Bbs.m_HighestPosted_s = std::max(m_This.m_Bbs.m_HighestPosted_s, msg.m_TimePosted);
+	m_This.m_Bbs.m_Totals.m_Count++;
+	m_This.m_Bbs.m_Totals.m_Size += wlk.m_Data.m_Message.n;
 
     // 1. Send to other BBS-es
 
@@ -2869,7 +3116,7 @@ void Node::Peer::OnMsg(const proto::BbsMsg& msg, bool bNonceValid)
 
 void Node::Peer::OnMsg(proto::BbsHaveMsg&& msg)
 {
-	if (!m_This.m_Cfg.m_Bbs)
+	if (!m_This.m_Cfg.m_Bbs.IsEnabled())
 		ThrowUnexpected();
 
     NodeDB& db = m_This.m_Processor.get_DB();
@@ -2893,7 +3140,7 @@ void Node::Peer::OnMsg(proto::BbsHaveMsg&& msg)
 
 void Node::Peer::OnMsg(proto::BbsGetMsg&& msg)
 {
-	if (!m_This.m_Cfg.m_Bbs)
+	if (!m_This.m_Cfg.m_Bbs.IsEnabled())
 		ThrowUnexpected();
 
 	NodeDB& db = m_This.m_Processor.get_DB();
@@ -2930,7 +3177,7 @@ void Node::Peer::SendBbsMsg(const NodeDB::WalkerBbs::Data& d)
 
 void Node::Peer::OnMsg(proto::BbsSubscribe&& msg)
 {
-	if (!m_This.m_Cfg.m_Bbs)
+	if (!m_This.m_Cfg.m_Bbs.IsEnabled())
 		ThrowUnexpected();
 
 	Bbs::Subscription::InPeer key;
@@ -2981,7 +3228,7 @@ void Node::Peer::BroadcastBbs(Bbs::Subscription& s)
 
 void Node::Peer::OnMsg(proto::BbsResetSync&& msg)
 {
-	if (!m_This.m_Cfg.m_Bbs)
+	if (!m_This.m_Cfg.m_Bbs.IsEnabled())
 		ThrowUnexpected();
 
 	m_CursorBbs = m_This.m_Processor.get_DB().BbsFindCursor(msg.m_TimeFrom) - 1;
@@ -2990,7 +3237,7 @@ void Node::Peer::OnMsg(proto::BbsResetSync&& msg)
 
 void Node::Peer::OnMsg(proto::BbsPickChannelV0&& msg)
 {
-	if (!m_This.m_Cfg.m_Bbs)
+	if (!m_This.m_Cfg.m_Bbs.IsEnabled())
 		ThrowUnexpected();
 
 	if (proto::LoginFlags::Extension1 & m_LoginFlags)
@@ -3013,7 +3260,7 @@ void Node::Peer::OnMsg(proto::GetUtxoEvents&& msg)
 {
     proto::UtxoEvents msgOut;
 
-    if (Flags::Owner & m_Flags)
+    if (Flags::Viewer & m_Flags)
     {
 		Processor& p = m_This.m_Processor;
 		NodeDB& db = p.get_DB();
@@ -3085,6 +3332,7 @@ void Node::Peer::OnMsg(proto::BlockFinalization&& msg)
         TxBase::Context::Params pars;
 		pars.m_bBlockMode = true;
 		TxBase::Context ctx(pars);
+		ctx.m_Height = m_This.m_Processor.m_Cursor.m_ID.m_Height + 1;
         if (!m_This.m_Processor.ValidateAndSummarize(ctx, *msg.m_Value, msg.m_Value->get_Reader()))
             ThrowUnexpected();
 
@@ -3104,7 +3352,7 @@ void Node::Peer::OnMsg(proto::BlockFinalization&& msg)
         for (size_t i = 0; i < tx.m_vOutputs.size(); i++)
         {
             Key::IDV kidv;
-            if (!tx.m_vOutputs[i]->Recover(*m_This.m_Keys.m_pOwner, kidv))
+            if (!tx.m_vOutputs[i]->Recover(m_This.m_Processor.m_Cursor.m_ID.m_Height + 1, *m_This.m_Keys.m_pOwner, kidv))
                 ThrowUnexpected();
         }
 
@@ -3213,8 +3461,6 @@ void Node::Miner::OnRefresh(uint32_t iIdx)
 
         static_assert(s.m_PoW.m_Nonce.nBytes <= hv.nBytes);
         s.m_PoW.m_Nonce = hv;
-
-        LOG_INFO() << "Mining nonce = " << s.m_PoW.m_Nonce;
 
         Block::PoW::Cancel fnCancel = [this, pTask](bool bRetrying)
         {
@@ -3456,13 +3702,14 @@ void Node::Miner::OnRefreshExternal()
 	m_External.m_pSolver->new_job(std::to_string(jobID), hv, m_pTask->m_Hdr.m_PoW, m_pTask->m_Hdr.m_Height , BIND_THIS_MEMFN(OnMinedExternal), fnCancel);
 }
 
-void Node::Miner::OnMinedExternal()
+IExternalPOW::BlockFoundResult Node::Miner::OnMinedExternal()
 {
 	std::string jobID_;
 	Block::PoW POW;
+	Height h;
 
 	assert(m_External.m_pSolver);
-	m_External.m_pSolver->get_last_found_block(jobID_, POW);
+	m_External.m_pSolver->get_last_found_block(jobID_, h, POW);
 
 	char* szEnd = nullptr;
 	uint64_t jobID = strtoul(jobID_.c_str(), &szEnd, 10);
@@ -3476,7 +3723,7 @@ void Node::Miner::OnMinedExternal()
     if (bReject)
     {
         LOG_INFO() << "Solution is rejected due it is outdated.";
-		return; // outdated
+		return IExternalPOW::solution_expired; // outdated
     }
 
 	Task::Ptr& pTask = m_External.get_At(jobID);
@@ -3484,7 +3731,7 @@ void Node::Miner::OnMinedExternal()
     if (!pTask || *pTask->m_pStop)
     {
         LOG_INFO() << "Solution is rejected due block mining has been canceled.";
-		return; // already cancelled
+		return IExternalPOW::solution_rejected; // already cancelled
     }
 
 	pTask->m_Hdr.m_PoW.m_Nonce = POW.m_Nonce;
@@ -3493,12 +3740,13 @@ void Node::Miner::OnMinedExternal()
     if (!pTask->m_Hdr.IsValidPoW())
     {
         LOG_INFO() << "invalid solution from external miner";
-        return;
+        return IExternalPOW::solution_rejected;
     }
 
 	m_pTask = pTask;
     *m_pTask->m_pStop = true;
     m_pEvtMined->post();
+    return IExternalPOW::solution_accepted;
 }
 
 void Node::Miner::OnMined()
@@ -3636,7 +3884,7 @@ void Node::Beacon::OnTimer()
         m_pOut = new OutCtx;
         m_pOut->m_Refs = 1;
 
-        m_pOut->m_Message.m_CfgChecksum = Rules::get().Checksum;
+        m_pOut->m_Message.m_CfgChecksum = Rules::get().get_LastFork().m_Hash;
         m_pOut->m_Message.m_NodeID = get_ParentObj().m_MyPublicID;
         m_pOut->m_Message.m_Port = htons(get_ParentObj().m_Cfg.m_Listen.port());
 
@@ -3677,7 +3925,7 @@ void Node::Beacon::OnRcv(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf, c
 
     memcpy(&msg, buf->base, sizeof(msg)); // copy it to prevent (potential) datatype misallignment and etc.
 
-    if (msg.m_CfgChecksum != Rules::get().Checksum)
+    if (msg.m_CfgChecksum != Rules::get().get_LastFork().m_Hash)
         return;
 
     Beacon* pThis = (Beacon*)handle->data;
@@ -3804,6 +4052,79 @@ PeerManager::PeerInfo* Node::PeerMan::AllocPeer()
 void Node::PeerMan::DeletePeer(PeerInfo& pi)
 {
     delete (PeerInfoPlus*)&pi;
+}
+
+bool Node::GenerateRecoveryInfo(const char* szPath)
+{
+	if (!m_Processor.BuildCwp())
+		return false; // no info yet
+
+	struct MyTraveler
+		:public RadixTree::ITraveler
+	{
+		RecoveryInfo::Writer m_Writer;
+		NodeDB* m_pDB;
+
+		virtual bool OnLeaf(const RadixTree::Leaf& x) override
+		{
+			const UtxoTree::MyLeaf& n = Cast::Up<UtxoTree::MyLeaf>(x);
+			UtxoTree::Key::Data d;
+			d = n.m_Key;
+
+			if (n.IsExt())
+			{
+				for (auto it = n.m_pIDs->begin(); n.m_pIDs->end() != it; it++)
+					OnUtxo(d, *it);
+			}
+			else
+				OnUtxo(d, n.m_ID);
+
+			return true;
+		}
+
+		void OnUtxo(const UtxoTree::Key::Data& d, TxoID id)
+		{
+			NodeDB::WalkerTxo wlk(*m_pDB);
+			m_pDB->TxoGetValue(wlk, id);
+
+			Deserializer der;
+			der.reset(wlk.m_Value.p, wlk.m_Value.n);
+
+			RecoveryInfo::Entry val;
+			der & val.m_Output;
+
+			// 2 ways to discover the UTXO create height: either directly by looking its TxoID in States table, or reverse-engineer it from Maturity
+			// Since currently maturity delta is independent of current height (not a function of height, not changed in current forks) - we prefer the 2nd method, which is faster.
+
+			//NodeDB::StateID sid;
+			//m_pDB->FindStateByTxoID(sid, id);
+			//val.m_CreateHeight = sid.m_Height;
+			//assert(val.m_Output.get_MinMaturity(val.m_CreateHeight) == d.m_Maturity);
+
+			val.m_CreateHeight = d.m_Maturity - val.m_Output.get_MinMaturity(0);
+
+			assert(val.m_Output.m_Commitment == d.m_Commitment);
+			val.m_Output.m_RecoveryOnly = true;
+
+			m_Writer.Write(val);
+		}
+	};
+
+	MyTraveler ctx;
+	ctx.m_pDB = &m_Processor.get_DB();
+
+	try
+	{
+		ctx.m_Writer.Open(szPath, m_Processor.m_Cwp);
+		m_Processor.get_Utxos().Traverse(ctx);
+	}
+	catch (const std::exception& ex)
+	{
+		LOG_ERROR() << ex.what();
+		return false;
+	}
+
+	return true;
 }
 
 } // namespace beam

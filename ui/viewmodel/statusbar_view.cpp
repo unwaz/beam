@@ -17,7 +17,7 @@
 #include "version.h"
 
 StatusbarViewModel::StatusbarViewModel()
-    : m_model(*AppModel::getInstance()->getWallet())
+    : m_model(*AppModel::getInstance().getWallet())
     , m_isOnline(false)
     , m_isSyncInProgress(false)
     , m_isFailedStatus(false)
@@ -38,11 +38,11 @@ StatusbarViewModel::StatusbarViewModel()
     connect(&m_model, SIGNAL(syncProgressUpdated(int, int)),
         SLOT(onSyncProgressUpdated(int, int)));
 
-    if (AppModel::getInstance()->getSettings().getRunLocalNode())
-    {
-        connect(&AppModel::getInstance()->getNode(), SIGNAL(syncProgressUpdated(int, int)),
+    connect(&AppModel::getInstance().getNode(), SIGNAL(syncProgressUpdated(int, int)),
             SLOT(onNodeSyncProgressUpdated(int, int)));
-    }
+    
+    connect(&AppModel::getInstance().getNode(), SIGNAL(failedToSyncNode(beam::wallet::ErrorType)),
+            SLOT(onGetWalletError(beam::wallet::ErrorType)));
 
     m_model.getAsync()->getNetworkStatus();
 }
@@ -69,10 +69,14 @@ int StatusbarViewModel::getNodeSyncProgress() const
 
 QString StatusbarViewModel::getBranchName() const
 {
+#ifdef BEAM_MAINNET
+    return QString();
+#else
     if (BRANCH_NAME.empty())
         return QString();
 
     return QString::fromStdString(" (" + BRANCH_NAME + ")");
+#endif
 }
 
 QString StatusbarViewModel::getWalletStatusErrorMsg() const
@@ -144,7 +148,8 @@ void StatusbarViewModel::onNodeConnectionChanged(bool isNodeConnected)
     if (!m_isFailedStatus)
     {
         // Failed status must have arrived already
-        setWalletStatusErrorMsg(tr("Wallet is not connected to the node"));
+        //% "Wallet is not connected to the node"
+        setWalletStatusErrorMsg(qtTrId("status-bar-view-not-connected"));
         setIsFailedStatus(true);
     }
 }

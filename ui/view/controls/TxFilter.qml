@@ -8,6 +8,7 @@ Item  {
     id: root
     
     property string label
+    property var capitalization: Font.MixedCase
 
     width: text_label.width
     height: 20
@@ -23,7 +24,8 @@ Item  {
 
         font.pixelSize: 12
         font.styleName: "Bold"; font.weight: Font.Bold
-        color: Style.white
+        font.capitalization: capitalization
+        color: Style.content_main
         opacity: 0.4
         text: label
 
@@ -43,7 +45,7 @@ Item  {
         width: text_label.width + 16
         height: 2
 
-        color: Style.bright_teal
+        color: Style.active
 
         visible: false
     }
@@ -52,7 +54,7 @@ Item  {
         anchors.fill: led
         radius: 5
         samples: 9
-        color: Style.bright_teal
+        color: Style.active
         source: led
 
         visible: led.visible

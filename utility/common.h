@@ -44,11 +44,11 @@
 #	include <winsock2.h>
 #endif // WIN32
 
-#ifndef verify
+#ifndef BEAM_VERIFY
 #	ifdef  NDEBUG
-#		define verify(x) ((void)(x))
+#		define BEAM_VERIFY(x) ((void)(x))
 #	else //  NDEBUG
-#		define verify(x) assert(x)
+#		define BEAM_VERIFY(x) assert(x)
 #	endif //  NDEBUG
 #endif // verify
 
@@ -142,6 +142,7 @@ namespace beam
 
 #ifdef WIN32
 	std::wstring Utf8toUtf16(const char*);
+	std::wstring Utf8toUtf16(const std::string&);
 #endif // WIN32
 
 	bool DeleteFile(const char*);

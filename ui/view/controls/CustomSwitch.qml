@@ -14,16 +14,17 @@ T.Switch {
                                       indicator ? indicator.implicitHeight : 0) + topPadding + bottomPadding)
     baselineOffset: contentItem.y + contentItem.baselineOffset
 
-    //padding: 12
     spacing: 12
 
-    palette.text: Style.white
+    palette.text: Style.content_main
 
-    contentItem: Text {
+    contentItem: SFText {
         rightPadding: control.indicator.width + control.spacing
         text: control.text
-        font: control.font
-        color: control.checked && control.enabled ? control.palette.text : Style.bluey_grey
+        font.pixelSize: control.font.pixelSize
+        font.styleName: control.font.styleName
+        font.weight: control.font.weight
+        color: control.palette.text
         elide: Text.ElideRight
         verticalAlignment: Text.AlignVCenter
     }
@@ -35,7 +36,7 @@ T.Switch {
         y: parent.height / 2 - height / 2
         radius: 10
         color: "transparent"
-        border.color: Style.bluey_grey
+        border.color: Style.content_secondary
 
         Rectangle {
             x: control.checked ? parent.width - width - 2 : 2
@@ -43,7 +44,7 @@ T.Switch {
             width: 16
             height: 16
             radius: 10
-            color: control.checked && control.enabled ? Style.bright_teal : Style.bluey_grey
+            color: control.checked && control.enabled ? Style.active : Style.content_secondary
         }
     }
 }

@@ -4,6 +4,7 @@ import QtQuick.Controls 2.4
 import QtQuick.Controls.Styles 1.2
 import QtGraphicalEffects 1.0
 import "controls"
+import "utils.js" as Utils
 import Beam.Wallet 1.0
 import QtQuick.Layouts 1.3
 
@@ -17,13 +18,17 @@ Item
 
     ConfirmationDialog {
         id: confirmationDialog
-        okButtonColor: Style.bright_teal
-        okButtonText: qsTr("change settings")
-        okButtonIconSource: "qrc:/assets/icon-settings-blue.svg"
-        cancelButtonIconSource: "qrc:/assets/icon-cancel-white.svg"
+        okButtonColor: Style.active
+        //% "Try again"
+        okButtonText: qsTrId("loading-try-again-button")
+        okButtonIconSource: "qrc:/assets/icon-restore-blue.svg"
+        //% "Change settings"
+        cancelButtonText: qsTrId("loading-change-settings-button")
+        cancelButtonIconSource: "qrc:/assets/icon-settings-white.svg"
 
         property alias titleText: title.text
         property alias messageText: message.text
+        property var rejectedCallback: undefined
 
         contentItem: Item {
             id: confirmationContent
@@ -41,7 +46,7 @@ Item
                     font.pixelSize: 18
                     font.styleName: "Bold";
                     font.weight: Font.Bold
-                    color: Style.white
+                    color: Style.content_main
                 }
 
                 SFText {
@@ -52,12 +57,12 @@ Item
                     Layout.rightMargin: 60
                     Layout.bottomMargin: 30
                     font.pixelSize: 14
-                    color: Style.white
+                    color: Style.content_main
                 }
             }
         }
-        onAccepted: {
-            cancelCreating();
+        onRejected: {
+            if (rejectedCallback) rejectedCallback();
         }
     }
 
@@ -71,27 +76,34 @@ Item
         }
 
         onWalletError: {
-            if (isCreating) {
-                confirmationDialog.titleText = title;
-                confirmationDialog.messageText = message;
-                confirmationDialog.open();
+            confirmationDialog.titleText        = title;
+            confirmationDialog.messageText      = message;
+            confirmationDialog.okButtonVisible  = false;
+            confirmationDialog.okButtonEnable   = false;
+            confirmationDialog.closePolicy      = Popup.NoAutoClose;
+            confirmationDialog.rejectedCallback = isCreating ? cancelCreating : changeNodeSettings;
+            confirmationDialog.open();
+        }
+
+        onWalletReseted: {
+            if(cancelCallback) {
+                cancelCallback();
             }
         }
     }
 
     function cancelCreating() {
         viewModel.resetWallet();
-        cancelCallback();
     }
 
-    LogoComponent {
-        id: logoComponent
-    }    
+    function changeNodeSettings () {
+        rootLoading.parent.setSource("qrc:/start.qml", {"isBadPortMode": true});
+    }
 
     Rectangle
     {
         anchors.fill: parent
-        color: Style.marine
+        color: Style.background_main
 
         Image {
             fillMode: Image.PreserveAspectCrop
@@ -103,97 +115,117 @@ Item
             anchors.fill: parent
             spacing: 0
             Item {
-                Layout.fillHeight: true
-                Layout.fillWidth: true
-                Layout.minimumHeight: 70
-                Layout.maximumHeight: 280
+                Layout.preferredHeight: Utils.getLogoTopGapSize(parent.height)
             }
 
-            Loader { 
-                sourceComponent: logoComponent 
+            LogoComponent {
                 Layout.alignment: Qt.AlignHCenter
-                Layout.fillHeight: true
-                Layout.minimumHeight: 200//187
-                Layout.maximumHeight: 269
-            }
-            Item {
-                Layout.fillHeight: true
-                Layout.minimumHeight: 30
-                Layout.maximumHeight: 89
-
-            }
-            Item {
-                Layout.preferredHeight: 186 
             }
 
             Item {
                 Layout.fillHeight: true
                 Layout.fillWidth: true
-                Layout.minimumHeight: 67
-            }
-        }
 
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: 0
-            Item {
-                Layout.fillHeight: true
-                Layout.minimumHeight: 70
-                Layout.maximumHeight: 280
-            }
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 0
 
-            Item { 
-                Layout.fillHeight: true
-                Layout.minimumHeight: 200//187
-                Layout.maximumHeight: 269
-            }
+                    Item {
+                        Layout.preferredHeight: 30
+                    }
 
-            Item {
-                Layout.fillHeight: true
-                Layout.minimumHeight: 30
-                Layout.maximumHeight: 89
-            }
-            SFText {
-                  Layout.bottomMargin: 6
-                Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
-                text: !isCreating ? qsTr("Loading wallet...") : ( isRecoveryMode ? qsTr("Restoring wallet...") : qsTr("Creating wallet..."))
-                font.pixelSize: 14
-                color: Style.white
-            }
-            SFText {
-                Layout.bottomMargin: 30
-                Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
-                text: viewModel.progressMessage
-                font.pixelSize: 14
-                opacity: 0.5
-                color: Style.white
-            }
-            CustomProgressBar {
-                Layout.alignment: Qt.AlignHCenter
-                id: bar
-                value: viewModel.progress
-            }
+                    SFText {
+                        Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
+                        Layout.preferredHeight: 16
+                        text: !isCreating ? 
+                                //% "Loading wallet..."
+                                qsTrId("loading-loading") :
+                                ( isRecoveryMode ?
+                                    //% "Restoring wallet..."
+                                    qsTrId("loading-restoring") :
+                                    //% "Creating wallet..."
+                                    qsTrId("loading-creating"))
+                        font.pixelSize: 14
+                        color: Style.content_main
+                    }
 
-            Item {
-                Layout.fillHeight: true
-            }
+                    SFText {
+                        Layout.topMargin: 6
+                        Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
+                        text: viewModel.progressMessage
+                        font.pixelSize: 14
+                        opacity: 0.5
+                        color: Style.content_main
+                    }
 
-            Row {
-                Layout.alignment: Qt.AlignBottom | Qt.AlignHCenter
-                Layout.topMargin: 52
+                    CustomProgressBar {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.topMargin: 24
+                        id: bar
+                        value: viewModel.progress
+                    }
 
-                CustomButton {
-                    visible: isCreating
-                    text: qsTr("cancel")
-                    icon.source: "qrc:/assets/icon-cancel.svg"
-                    onClicked: {
-                        cancelCreating();
+                    SFText {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.topMargin: 30
+                        width: 584
+                        //% "Please wait for synchronization and do not close or minimize the application."
+                        text: qsTrId("loading-restore-message-line1")
+                        font.pixelSize: 14
+                        color: Style.content_secondary
+                        font.italic: true
+                        visible: isRecoveryMode
+                    }
+                    Row {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.topMargin: 20
+                        SFText {
+                            horizontalAlignment: Text.AlignHCenter
+                            width: 548
+                            height: 30
+                            //% "Only the wallet balance (UTXO) can be restored, transaction info and addresses are always private and never kept in the blockchain."
+                            text: qsTrId("loading-restore-message-line2")
+                            font.pixelSize: 14
+                            color: Style.content_secondary
+                            wrapMode: Text.Wrap
+                            font.italic: true
+                            visible: isRecoveryMode
+                        }
+                    }
+
+                    Row {
+                        Layout.alignment: Qt.AlignBottom | Qt.AlignHCenter
+                        Layout.topMargin: isRecoveryMode ? 40 : 52
+
+                        CustomButton {
+                            visible: (isCreating || isRecoveryMode)
+                            enabled: true
+                            //% "Cancel"
+                            text: qsTrId("general-cancel")
+                            icon.source: "qrc:/assets/icon-cancel.svg"
+                            onClicked: {
+                                this.enabled = false;
+                                cancelCreating();
+                            }
+                        }
+                    }
+
+                    Item {
+                        Layout.fillHeight: true
+                        Layout.minimumHeight: 67
+                    }
+
+                    SFText {
+                        Layout.alignment:    Qt.AlignHCenter
+                        font.pixelSize:      12
+                        color:               Qt.rgba(255, 255, 255, 0.3)
+                        text:                [qsTrId("settings-version"), BeamGlobals.version()].join(' ')
+                    }
+
+                    Item {
+                        Layout.minimumHeight: 35
                     }
                 }
-            }
-            Item {
-                Layout.fillHeight: true
-                Layout.minimumHeight: 67
             }
         }
     }

@@ -10,16 +10,17 @@ ComboBox {
     id: control
     
     spacing: 4
+    property int fontPixelSize: 12
 
     delegate: ItemDelegate {
         id: itemDelegate
         width: control.width
         contentItem: SFText {
             text: modelData
-            color: Style.white
+            color: Style.content_main
             elide: Text.ElideMiddle
             verticalAlignment: Text.AlignVCenter
-			font.pixelSize: 12
+			font.pixelSize: fontPixelSize
         }
 
         highlighted: control.highlightedIndex === index
@@ -28,7 +29,7 @@ ComboBox {
             implicitWidth: 100
             implicitHeight: 20
             opacity: enabled ? 1 : 0.3
-            color:itemDelegate.highlighted ? Style.bluey_grey : Style.combobox_color
+            color:itemDelegate.highlighted ? Style.content_secondary : Style.background_details
         }
     }
 
@@ -43,8 +44,8 @@ ComboBox {
         rightPadding: control.indicator.width + control.spacing
         clip: true
         text: control.currentText
-        color: Style.white
-		font.pixelSize: 12
+        color: Style.content_main
+		font.pixelSize: fontPixelSize
         verticalAlignment: Text.AlignVCenter
     }
 
@@ -53,7 +54,7 @@ ComboBox {
             width: control.width
             height: control.activeFocus || control.hovered ? 2 : 1
             y: control.height - 1
-            color: Style.white
+            color: Style.content_main
             opacity: (control.activeFocus || control.hovered)? 0.3 : 0.1
         }
     }
@@ -81,14 +82,14 @@ ComboBox {
 
         background: Item {
             Rectangle {
-                color: Style.combobox_color
+                color: Style.background_details
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: control.height
             }
             Rectangle {
                 anchors.fill: parent
-                color: Style.combobox_color
+                color: Style.background_details
                 radius: 10
             }
         }

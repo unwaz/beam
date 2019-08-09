@@ -14,27 +14,28 @@
 
 #pragma once
 
-#include "wallet_transaction.h"
+#include "base_transaction.h"
 
-namespace beam { namespace wallet {
+namespace beam::wallet
+{
+    class BaseTxBuilder;
 
     class OneSideTransaction : public BaseTransaction
     {
     public:
         static BaseTransaction::Ptr Create(INegotiatorGateway& gateway
-                                        , beam::IWalletDB::Ptr walletDB
+                                        , IWalletDB::Ptr walletDB
+                                        , IPrivateKeyKeeper::Ptr keyKeeper
                                         , const TxID& txID);
     private:
         OneSideTransaction(INegotiatorGateway& gateway
-            , beam::IWalletDB::Ptr walletDB
+            , IWalletDB::Ptr walletDB
+            , IPrivateKeyKeeper::Ptr keyKeeper
             , const TxID& txID);
-
     private:
         TxType GetType() const override;
         void UpdateImpl() override;
+    private:
+        std::shared_ptr<BaseTxBuilder> m_TxBuilder;
     };
-
-
-
-}
 }

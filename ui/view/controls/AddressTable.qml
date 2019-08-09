@@ -1,7 +1,9 @@
 import QtQuick 2.11
 import QtQuick.Controls 1.4
 import QtQuick.Controls 2.3
+import Beam.Wallet 1.0
 import "."
+import "../utils.js" as Utils
 
 CustomTableView {
     id: rootControl
@@ -11,6 +13,7 @@ CustomTableView {
     property var parentModel
     property bool isExpired: false
     property var editDialog
+    property var showQRDialog
     anchors.fill: parent
     frameVisible: false
     selectionMode: SelectionMode.NoSelection
@@ -18,7 +21,8 @@ CustomTableView {
 
     TableViewColumn {
         role: parentModel.nameRole
-        title: qsTr("Comment")
+        //% "Comment"
+        title: qsTrId("general-comment")
         width: 150 * rootControl.resizableWidth / 750
         resizable: false
         movable: false
@@ -26,7 +30,8 @@ CustomTableView {
 
     TableViewColumn {
         role: parentModel.addressRole
-        title: qsTr("Address")
+        //% "Address"
+        title: qsTrId("general-address")
         width: 150 *  rootControl.resizableWidth / 750
         movable: false
         resizable: false
@@ -44,9 +49,9 @@ CustomTableView {
                     elide: Text.ElideMiddle
                     anchors.verticalCenter: parent.verticalCenter
                     text: styleData.value
-                    color: Style.white
+                    color: Style.content_main
                     copyMenuEnabled: true
-                    onCopyText: parentModel.copyToClipboard(text)
+                    onCopyText: BeamGlobals.copyToClipboard(text)
                 }
             }
         }
@@ -54,7 +59,8 @@ CustomTableView {
 
     TableViewColumn {
         role: parentModel.categoryRole
-        title: qsTr("Category")
+        //% "Category"
+        title: qsTrId("general-category")
         width: 150 *  rootControl.resizableWidth / 750
         resizable: false
         movable: false
@@ -62,18 +68,54 @@ CustomTableView {
 
     TableViewColumn {
         role: parentModel.expirationRole
-        title: qsTr("Expiration date")
+        //% "Expiration date"
+        title: qsTrId("general-exp-date")
         width: 150 *  rootControl.resizableWidth / 750
         resizable: false
         movable: false
+        delegate: Item {
+            Item {
+                width: parent.width
+                height: rootControl.rowHeight
+
+                SFText {
+                    font.pixelSize: 14
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 20
+                    elide: Text.ElideRight
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Utils.formatDateTime(styleData.value, parentModel.getLocaleName())
+                    color: Style.content_main
+                }
+            }
+        }
     }
 
     TableViewColumn {
         role:parentModel.createdRole
-        title: qsTr("Created")
+        //% "Created"
+        title: qsTrId("general-created")
         width: 150 *  rootControl.resizableWidth / 750
         resizable: false
         movable: false
+        delegate: Item {
+            Item {
+                width: parent.width
+                height: rootControl.rowHeight
+
+                SFText {
+                    font.pixelSize: 14
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 20
+                    elide: Text.ElideRight
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Utils.formatDateTime(styleData.value, parentModel.getLocaleName())
+                    color: Style.content_main
+                }
+            }
+        }
     }
 
     TableViewColumn {
@@ -95,8 +137,20 @@ CustomTableView {
         Rectangle {
             anchors.fill: parent
 
-            color: styleData.selected ? Style.bright_sky_blue : Style.light_navy
+            color: styleData.selected ? Style.row_selected : Style.background_row_even
             visible: styleData.selected ? true : styleData.alternate
+        }
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.RightButton
+            onClicked: {
+                if (mouse.button == Qt.RightButton && styleData.row != undefined)
+                {
+                    contextMenu.address = rootControl.model[styleData.row].address;
+                    contextMenu.addressItem = rootControl.model[styleData.row];
+                    contextMenu.popup();
+                }
+            }
         }
     }
 
@@ -119,7 +173,8 @@ CustomTableView {
                     spacing: 10
                     CustomToolButton {
                         icon.source: "qrc:/assets/icon-actions.svg"
-                        ToolTip.text: qsTr("Actions")
+                        //% "Actions"
+                        ToolTip.text: qsTrId("general-actions")
                         onClicked: {
                             contextMenu.address = rootControl.model[styleData.row].address;
                             contextMenu.addressItem = rootControl.model[styleData.row];
@@ -138,18 +193,40 @@ CustomTableView {
         property string address
         property var addressItem
         Action {
-            text: qsTr("edit address")
+            id: showQRAction
+            //: Entry in adress table context menu to show QR
+            //% "Show QR code"
+            text: qsTrId("address-table-cm-show-qr")
+            icon.source: "qrc:/assets/icon-qr.svg"
+            onTriggered: {
+                showQRDialog.addressItem = contextMenu.addressItem;
+                showQRDialog.open();
+            }
+        }
+        Action {
+            //: Entry in adress table context menu to edit
+            //% "Edit address"
+            text: qsTrId("address-table-cm-edit")
             icon.source: "qrc:/assets/icon-edit.svg"
             onTriggered: {
                 editDialog.addressItem = contextMenu.addressItem;
+                editDialog.reset();
                 editDialog.open();
             }
         }
         Action {
-            text: qsTr("delete address")
+            //: Entry in adress table context menu to delete
+            //% "Delete address"
+            text: qsTrId("address-table-cm-delete")
             icon.source: "qrc:/assets/icon-delete.svg"
             onTriggered: {
                 viewModel.deleteAddress(contextMenu.address);
+            }
+        }
+    
+        Component.onCompleted: {
+            if (isExpired) {
+                contextMenu.removeAction(showQRAction);
             }
         }
     }

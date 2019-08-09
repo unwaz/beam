@@ -93,6 +93,7 @@ namespace beam {
 				State& s0 = m_vStates[i - 1];
 				s.m_Hdr = s0.m_Hdr;
 				s.m_Hdr.NextPrefix();
+                s.m_Hdr.m_TimeStamp = getTimestamp();
 
 				uint32_t nSize = m_Mmr.get_NodeSize(i - 1);
 				s0.m_pMmrData.reset(new uint8_t[nSize]);
@@ -104,6 +105,7 @@ namespace beam {
 				s.m_Hdr.m_Height = Rules::HeightGenesis;
 				s.m_Hdr.m_Prev = Rules::get().Prehistoric;
 				s.m_Hdr.m_PoW.m_Difficulty = Rules::get().DA.Difficulty0;
+                s.m_Hdr.m_TimeStamp = getTimestamp();
 			}
 
 			if (!((i + 1) % 8000))

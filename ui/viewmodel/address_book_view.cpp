@@ -17,9 +17,11 @@
 #include <QApplication>
 #include <QClipboard>
 #include "model/app_model.h"
+#include "model/qr.h"
 
 using namespace std;
 using namespace beam;
+using namespace beam::wallet;
 using namespace beamui;
 
 namespace
@@ -33,7 +35,7 @@ namespace
     }
 }
 
-AddressItem::AddressItem(const beam::WalletAddress& address)
+AddressItem::AddressItem(const beam::wallet::WalletAddress& address)
     : m_walletAddress(address)
 {
 
@@ -54,17 +56,20 @@ QString AddressItem::getCategory() const
     return QString::fromStdString(m_walletAddress.m_category);
 }
 
-QString AddressItem::getExpirationDate() const
+QDateTime AddressItem::getExpirationDate() const
 {
-    if (m_walletAddress.m_duration == 0)
-        return tr("never");
-
-    return toString(m_walletAddress.getExpirationTime());
+    QDateTime datetime;
+    datetime.setTime_t(m_walletAddress.getExpirationTime());
+    
+    return datetime;
 }
 
-QString AddressItem::getCreateDate() const
+QDateTime AddressItem::getCreateDate() const
 {
-    return toString(m_walletAddress.getCreateTime());
+    QDateTime datetime;
+    datetime.setTime_t(m_walletAddress.getCreateTime());
+    
+    return datetime;
 }
 
 bool AddressItem::isNeverExpired() const
@@ -87,7 +92,7 @@ beam::Timestamp AddressItem::getExpirationTimestamp() const
     return m_walletAddress.getExpirationTime();
 }
 
-ContactItem::ContactItem(const beam::WalletAddress& address)
+ContactItem::ContactItem(const beam::wallet::WalletAddress& address)
     : m_walletAddress(address)
 {
 
@@ -109,13 +114,15 @@ QString ContactItem::getCategory() const
 }
 
 AddressBookViewModel::AddressBookViewModel()
-    : m_model{*AppModel::getInstance()->getWallet()}
+    : m_model{*AppModel::getInstance().getWallet()}
 {
-    connect(&m_model, SIGNAL(walletStatus(const WalletStatus&)),
-        SLOT(onStatus(const WalletStatus&)));
+    connect(&m_model,
+            SIGNAL(walletStatus(const beam::wallet::WalletStatus&)),
+            SLOT(onStatus(const beam::wallet::WalletStatus&)));
 
-    connect(&m_model, SIGNAL(adrresses(bool, const std::vector<beam::WalletAddress>&)),
-        SLOT(onAddresses(bool, const std::vector<beam::WalletAddress>&)));
+    connect(&m_model,
+            SIGNAL(addressesChanged(bool, const std::vector<beam::wallet::WalletAddress>&)),
+            SLOT(onAddresses(bool, const std::vector<beam::wallet::WalletAddress>&)));
 
     getAddressesFromModel();
 
@@ -236,25 +243,40 @@ void AddressBookViewModel::deleteAddress(const QString& addr)
     m_model.getAsync()->deleteAddress(walletID);
 }
 
-void AddressBookViewModel::copyToClipboard(const QString& text)
-{
-    QApplication::clipboard()->setText(text);
-}
-
-void AddressBookViewModel::saveChanges(const QString& addr, const QString& name, bool isNever, bool makeActive, bool makeExpired)
+void AddressBookViewModel::saveChanges(const QString& addr, const QString& name, uint expirationStatus)
 {
     WalletID walletID;
     walletID.FromHex(addr.toStdString());
 
-    m_model.getAsync()->saveAddressChanges(walletID, name.toStdString(), isNever, makeActive, makeExpired);
+    m_model.getAsync()->updateAddress(walletID, name.toStdString(), static_cast<WalletAddress::ExpirationStatus>(expirationStatus));
 }
 
-void AddressBookViewModel::onStatus(const WalletStatus&)
+// static
+QString AddressBookViewModel::generateQR(
+        const QString& addr, uint width, uint height)
+{
+    QR qr(addr, width, height);
+    return qr.getEncoded();
+}
+
+// static
+QString AddressBookViewModel::getLocaleName()
+{
+    const auto& settings = AppModel::getInstance().getSettings();
+    return settings.getLocale();
+}
+
+bool AddressBookViewModel::isAddressWithCommentExist(const QString& comment) const
+{
+    return m_model.isAddressWithCommentExist(comment.toStdString());
+}
+
+void AddressBookViewModel::onStatus(const beam::wallet::WalletStatus&)
 {
     getAddressesFromModel();
 }
 
-void AddressBookViewModel::onAddresses(bool own, const std::vector<WalletAddress>& addresses)
+void AddressBookViewModel::onAddresses(bool own, const std::vector<beam::wallet::WalletAddress>& addresses)
 {
     if (own)
     {

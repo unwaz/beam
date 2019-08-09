@@ -12,7 +12,7 @@ Rectangle {
     property string maturing
 
     radius: 10
-    color: Style.dark_slate_blue
+    color: Style.background_second
     clip: true
 
     signal copyValueText(string value)
@@ -30,7 +30,7 @@ Rectangle {
             font.pixelSize: 18
             font.styleName: "Bold";
             font.weight: Font.Bold
-            color: Style.white
+            color: Style.content_main
             text: title
         }
                         
@@ -50,9 +50,11 @@ Rectangle {
                     font.pixelSize: 12
                     font.styleName: "Normal";
                     font.weight: Font.Bold
-                    color: Style.white
+                    color: Style.content_main
                     opacity: 0.6
-                    text: qsTr("RECEIVING")
+                    //% "receiving"
+                    text: qsTrId("general-receiving")
+                    font.capitalization: Font.AllUppercase
                 }
 
                 SFLabel {
@@ -65,7 +67,7 @@ Rectangle {
                     font.pixelSize: 20
                     fontSizeMode: Text.Fit
                     minimumPixelSize: 14
-                    color: Style.bright_sky_blue
+                    color: Style.accent_incoming
                     text: (receiving !== "0") ? "+" + receiving : receiving;
                     elide: Text.ElideRight
                     copyMenuEnabled: true
@@ -90,9 +92,11 @@ Rectangle {
                     font.pixelSize: 12
                     font.styleName: "Normal";
                     font.weight: Font.Bold
-                    color: Style.white
+                    color: Style.content_main
                     opacity: 0.6
-                    text: qsTr("SENDING")
+                    //% "sending"
+                    text: qsTrId("general-sending")
+                    font.capitalization: Font.AllUppercase
                 }
 
                 SFLabel {
@@ -105,7 +109,7 @@ Rectangle {
                     font.pixelSize: 20
                     fontSizeMode: Text.Fit
                     minimumPixelSize: 14
-                    color: Style.heliotrope
+                    color: Style.accent_outgoing
                     text: (sending !== "0") ? "-" + sending : sending;
                     elide: Text.ElideRight
                     copyMenuEnabled: true
@@ -130,9 +134,11 @@ Rectangle {
                     font.pixelSize: 12
                     font.styleName: "Normal";
                     font.weight: Font.Bold
-                    color: Style.white
+                    color: Style.content_main
                     opacity: 0.6
-                    text: qsTr("MATURING")
+                    //% "Maturing"
+                    text: qsTrId("secondary-panel-maturing")
+                    font.capitalization: Font.AllUppercase
                 }
 
                 SFLabel {
@@ -145,7 +151,7 @@ Rectangle {
                     font.pixelSize: 20
                     fontSizeMode: Text.Fit
                     minimumPixelSize: 14
-                    color: Style.white
+                    color: Style.content_main
                     text: maturing
                     elide: Text.ElideRight
                     copyMenuEnabled: true
