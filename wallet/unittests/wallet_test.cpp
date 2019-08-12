@@ -1182,15 +1182,6 @@ namespace
             return output;
         }
 
-        TxKernel::Ptr CreateKernel(Output::Ptr, Height minHeight, Height maxHeight)
-        {
-            auto kernel = make_unique<TxKernel>();
-            kernel->m_Fee = 0UL;
-            kernel->m_Height.m_Min = minHeight;
-            kernel->m_Height.m_Max = maxHeight;
-            kernel->m_Commitment = Zero;
-        }
-
     private:
         std::vector<Output::Ptr> m_Outputs;
     };
