@@ -51,7 +51,8 @@ Label {
         dim: false
         enabled: control.copyMenuEnabled
         Action {
-            text: qsTr("copy")
+            //% "Copy"
+            text: qsTrId("general-copy")
             icon.source: "qrc:/assets/icon-copy.svg"
             enabled: control.enabled && control.copyMenuEnabled
             onTriggered: control.copyText()

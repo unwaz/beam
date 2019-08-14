@@ -17,10 +17,10 @@
 
 #include "node/node.h"
 #include "core/ecc_native.h"
-#include "core/ecc.h"
 #include "core/serialization_adapters.h"
+#include "core/block_rw.h"
+#include "utility/cli/options.h"
 #include "utility/log_rotation.h"
-#include "utility/options.h"
 #include "utility/helpers.h"
 #include <iomanip>
 
@@ -190,9 +190,15 @@ int main_impl(int argc, char* argv[])
 
 			Rules::get().UpdateChecksum();
             LOG_INFO() << "Beam Node " << PROJECT_VERSION << " (" << BRANCH_NAME << ")";
-			LOG_INFO() << "Rules signature: " << Rules::get().Checksum;
+			LOG_INFO() << "Rules signature: " << Rules::get().get_SignatureStr();
 
 			auto port = vm[cli::PORT].as<uint16_t>();
+
+            if (!port)
+            {
+                LOG_ERROR() << "Port must be specified";
+                return -1;
+            }
 
 			{
 				reactor = io::Reactor::create();
@@ -208,7 +214,9 @@ int main_impl(int argc, char* argv[])
 				if (stratumPort > 0) {
 					IExternalPOW::Options powOptions;
                     find_certificates(powOptions, vm[cli::STRATUM_SECRETS_PATH].as<string>(), vm[cli::STRATUM_USE_TLS].as<bool>());
-					stratumServer = IExternalPOW::create(powOptions, *reactor, io::Address().port(stratumPort));
+                    unsigned noncePrefixDigits = vm[cli::NONCEPREFIX_DIGITS].as<unsigned>();
+                    if (noncePrefixDigits > 6) noncePrefixDigits = 6;
+					stratumServer = IExternalPOW::create(powOptions, *reactor, io::Address().port(stratumPort), noncePrefixDigits);
 				}
 
 				{
@@ -221,7 +229,7 @@ int main_impl(int argc, char* argv[])
 					node.m_Cfg.m_Listen.port(port);
 					node.m_Cfg.m_Listen.ip(INADDR_ANY);
 					node.m_Cfg.m_sPathLocal = vm[cli::STORAGE].as<string>();
-					node.m_Cfg.m_MiningThreads = vm[cli::MINING_THREADS].as<uint32_t>();
+					node.m_Cfg.m_MiningThreads = 0; // by default disabled
 					node.m_Cfg.m_VerificationThreads = vm[cli::VERIFICATION_THREADS].as<int>();
 
 					node.m_Cfg.m_LogUtxos = vm[cli::LOG_UTXOS].as<bool>();
@@ -270,25 +278,22 @@ int main_impl(int argc, char* argv[])
 
 					std::vector<std::string> vPeers = getCfgPeers(vm);
 
-					node.m_Cfg.m_Connect.resize(vPeers.size());
-
 					for (size_t i = 0; i < vPeers.size(); i++)
 					{
-						io::Address& addr = node.m_Cfg.m_Connect[i];
-						if (!addr.resolve(vPeers[i].c_str()))
+                        io::Address addr;
+
+                        if (addr.resolve(vPeers[i].c_str()))
+                        {
+						    if (!addr.port())
+						    {
+							    addr.port(port);
+						    }
+
+                            node.m_Cfg.m_Connect.push_back(addr);
+                        }
+                        else
 						{
 							LOG_ERROR() << "unable to resolve: " << vPeers[i];
-							return -1;
-						}
-
-						if (!addr.port())
-						{
-							if (!port)
-							{
-								LOG_ERROR() << "Port must be specified";
-								return -1;
-							}
-							addr.port(port);
 						}
 					}
 
@@ -312,13 +317,34 @@ int main_impl(int argc, char* argv[])
 					if (vm.count(cli::CHECKDB))
 						node.m_Cfg.m_ProcessorParams.m_CheckIntegrityAndVacuum = vm[cli::CHECKDB].as<bool>();
 
-					node.m_Cfg.m_Bbs = vm[cli::BBS_ENABLE].as<bool>();
+					if (vm.count(cli::RESET_ID))
+						node.m_Cfg.m_ProcessorParams.m_ResetSelfID = vm[cli::RESET_ID].as<bool>();
+
+					if (vm.count(cli::ERASE_ID))
+						node.m_Cfg.m_ProcessorParams.m_EraseSelfID = vm[cli::ERASE_ID].as<bool>();
+
+					if (!vm[cli::BBS_ENABLE].as<bool>())
+						ZeroObject(node.m_Cfg.m_Bbs.m_Limit);
 
 					node.m_Cfg.m_Horizon.m_Branching = Rules::get().Macroblock.MaxRollback / 4; // inferior branches would be pruned when height difference is this.
 					node.m_Cfg.m_Horizon.m_SchwarzschildHi = vm[cli::HORIZON_HI].as<Height>();
 					node.m_Cfg.m_Horizon.m_SchwarzschildLo = vm[cli::HORIZON_LO].as<Height>();
 
 					node.Initialize(stratumServer.get());
+
+					if (vm.count(cli::GENERATE_RECOVERY_PATH))
+					{
+						string sPath = vm[cli::GENERATE_RECOVERY_PATH].as<string>();
+						LOG_INFO() << "Writing recovery info...";
+						node.GenerateRecoveryInfo(sPath.c_str());
+						LOG_INFO() << "Recovery info written";
+					}
+
+					if (vm.count(cli::RECOVERY_AUTO_PATH))
+					{
+						node.m_Cfg.m_Recovery.m_sPathOutput = vm[cli::RECOVERY_AUTO_PATH].as<string>();
+						node.m_Cfg.m_Recovery.m_Granularity = vm[cli::RECOVERY_AUTO_PERIOD].as<uint32_t>();
+					}
 
 					io::Timer::Ptr pCrashTimer;
 

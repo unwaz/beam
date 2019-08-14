@@ -27,8 +27,10 @@
 #define UNKNOWN_API_KEY -32002
 #define INVALID_ADDRESS -32003
 
-namespace beam
+namespace beam::wallet
 {
+    constexpr Amount MinimumFee = 100;
+
     using json = nlohmann::json;
 
 #define API_WRITE_ACCESS true
@@ -41,41 +43,42 @@ namespace beam
     macro(AddrList,         "addr_list",        API_READ_ACCESS)    \
     macro(ValidateAddress,  "validate_address", API_READ_ACCESS)    \
     macro(Send,             "tx_send",          API_WRITE_ACCESS)   \
-    macro(Replace,          "replace",          API_WRITE_ACCESS)   \
     macro(Status,           "tx_status",        API_READ_ACCESS)    \
     macro(Split,            "tx_split",         API_WRITE_ACCESS)   \
     macro(TxCancel,         "tx_cancel",        API_WRITE_ACCESS)   \
+    macro(TxDelete,         "tx_delete",        API_WRITE_ACCESS)   \
     macro(GetUtxo,          "get_utxo",         API_READ_ACCESS)    \
     macro(Lock,             "lock",             API_WRITE_ACCESS)   \
     macro(Unlock,           "unlock",           API_WRITE_ACCESS)   \
     macro(TxList,           "tx_list",          API_READ_ACCESS)    \
     macro(WalletStatus,     "wallet_status",    API_READ_ACCESS)
 
-    struct CreateAddress
+    struct AddressData
     {
-        int lifetime;
+        boost::optional<std::string> comment;
 
+        enum Expiration { Expired, Never, OneDay };
+        boost::optional<Expiration> expiration;
+    };
+
+    struct CreateAddress : AddressData
+    {
         struct Response
         {
-            WalletID address;
+            wallet::WalletID address;
         };
     };
 
     struct DeleteAddress
     {
-        WalletID address;
+        wallet::WalletID address;
 
         struct Response {};
     };
 
-    struct EditAddress
+    struct EditAddress : AddressData
     {
-        WalletID address;
-
-        boost::optional<std::string> comment;
-
-        enum Expiration { Expired, Never, OneDay };
-        boost::optional<Expiration> expiration;
+        wallet::WalletID address;
 
         struct Response {};
     };
@@ -86,13 +89,13 @@ namespace beam
 
         struct Response
         {
-            std::vector<WalletAddress> list;
+            std::vector<wallet::WalletAddress> list;
         };
     };
 
     struct ValidateAddress
     {
-        WalletID address = Zero;
+        wallet::WalletID address = Zero;
 
         struct Response
         {
@@ -104,33 +107,26 @@ namespace beam
     struct Send
     {
         Amount value;
-        CoinIDList coins;
-        Amount fee;
-        boost::optional<WalletID> from;
-        WalletID address;
+        Amount fee = MinimumFee;
+        boost::optional<wallet::CoinIDList> coins;
+        boost::optional<wallet::WalletID> from;
+        boost::optional<uint64_t> session;
+        wallet::WalletID address;
         std::string comment;
 
         struct Response
         {
-            TxID txId;
-        };
-    };
-
-    struct Replace
-    {
-        struct Response
-        {
-
+            wallet::TxID txId;
         };
     };
 
     struct Status
     {
-        TxID txId;
+        wallet::TxID txId;
 
         struct Response
         {
-            TxDescription tx;
+            wallet::TxDescription tx;
             Height kernelProofHeight;
             Height systemHeight;
             uint64_t confirmations;
@@ -140,18 +136,29 @@ namespace beam
     struct Split
     {
         //int session;
-        Amount fee;
+        Amount fee = MinimumFee;
         AmountList coins;
 
         struct Response
         {
-            TxID txId;
+            wallet::TxID txId;
         };
     };
 
     struct TxCancel
     {
-        TxID txId;
+        wallet::TxID txId;
+
+        struct Response
+        {
+            bool result;
+        };
+    };
+
+
+    struct TxDelete
+    {
+        wallet::TxID txId;
 
         struct Response
         {
@@ -166,23 +173,28 @@ namespace beam
 
         struct Response
         {
-            std::vector<beam::Coin> utxos;
+            std::vector<wallet::Coin> utxos;
         };
     };
 
     struct Lock
     {
+        wallet::CoinIDList coins;
+        uint64_t session;
+
         struct Response
         {
-
+            bool result;
         };
     };
 
     struct Unlock
     {
+        uint64_t session;
+
         struct Response
         {
-
+            bool result;
         };
     };
 
@@ -190,7 +202,7 @@ namespace beam
     {
         struct
         {
-            boost::optional<TxStatus> status;
+            boost::optional<wallet::TxStatus> status;
             boost::optional<Height> height;
         } filter;
 
@@ -214,7 +226,6 @@ namespace beam
             Amount receiving = 0;
             Amount sending = 0;
             Amount maturing = 0;
-            Amount locked = 0;
             double difficulty = 0;
         };
     };

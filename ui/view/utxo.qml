@@ -23,7 +23,9 @@ ColumnLayout {
             Layout.maximumHeight: 40
             font.pixelSize: 36
             color: Style.content_main
-            text: qsTr("UTXO")
+            //% "UTXO"
+            text: qsTrId("utxo-utxo")
+            font.capitalization: Font.AllUppercase
         }
 
         Item {
@@ -47,14 +49,15 @@ ColumnLayout {
                     font.pixelSize: 18
                     font.styleName: "Bold"; font.weight: Font.Bold
                     color: Style.content_main
-                    text: qsTr("Blockchain Height")
+                    //% "Blockchain Height"
+                    text: qsTrId("utxo-blockchain-height")
                 }
 
                 SFText {
                     Layout.minimumHeight: 20
                     Layout.maximumHeight: 20
                     font.pixelSize: 16
-                    color: Style.content_accent_second
+                    color: Style.active
                     text: viewModel.currentHeight
                 }
             }
@@ -62,7 +65,7 @@ ColumnLayout {
             Rectangle {
                 anchors.fill: parent
                 radius: 10
-                color: Style.background_emphasize
+                color: Style.white
                 opacity: 0.1
             }
         }
@@ -86,7 +89,8 @@ ColumnLayout {
                     font.pixelSize: 18
                     font.styleName: "Bold"; font.weight: Font.Bold
                     color: Style.content_main
-                    text: qsTr("Last block hash")
+                    //% "Last block hash"
+                    text: qsTrId("utxo-last-block-hash")
                 }
 
                 SFText {
@@ -94,7 +98,7 @@ ColumnLayout {
                     Layout.minimumHeight: 20
                     Layout.maximumHeight: 20
                     font.pixelSize: 16
-                    color: Style.content_accent_second
+                    color: Style.active
                     text: viewModel.currentStateHash
                     elide: Text.ElideRight
                 }
@@ -103,7 +107,7 @@ ColumnLayout {
             Rectangle {
                 anchors.fill: parent
                 radius: 10
-                color: Style.background_emphasize
+                color: Style.white
                 opacity: 0.1
             }
         }
@@ -142,21 +146,24 @@ ColumnLayout {
 
         TableViewColumn {
             role: viewModel.amountRole
-            title: qsTr("Amount")
+            //% "Amount"
+            title: qsTrId("general-amount")
             width: 300 * parent.width / 800
             movable: false
         }
 
         TableViewColumn {
             role: viewModel.maturityRole
-            title: qsTr("Maturity")
+            //% "Maturity"
+            title: qsTrId("utxo-head-maturity")
             width: 150 * parent.width / 800
             movable: false
         }
 
         TableViewColumn {
             role: viewModel.statusRole
-            title: qsTr("Status")
+            //% "Status"
+            title: qsTrId("general-status")
             width: 200 * parent.width / 800
             movable: false
             resizable: false
@@ -165,8 +172,8 @@ ColumnLayout {
                 width: parent.width
                 height: tableView.rowHeight
                 readonly property var lineSeparator: "\n"
-                property var texts: styleData.value.split(lineSeparator)
-                property color secondLineColor: Style.content_inconspicuous
+                property var texts: utxoStatusText(styleData.value).split(lineSeparator)
+                property color secondLineColor: Style.content_secondary
 
                 ColumnLayout {
                     anchors.right: parent.right
@@ -177,7 +184,7 @@ ColumnLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.topMargin: secondLineEnabled() ? 0 : 20
-                        color: getTextColor(delegate_id.texts)
+                        color: getTextColor(styleData.value)
                         elide: Text.ElideRight
                         text: delegate_id.texts[0]
                         textFormat: Text.StyledText
@@ -198,34 +205,54 @@ ColumnLayout {
                     }
                 }
 
-                function getTextColor(texts) {
-                    if (texts[0] === "available") {
-                        return Style.content_accent_second;
-                    }
-                    else if (texts[0] == "maturing") {
-                        return Style.content_accent_first;
-                    }
-                    else if (texts[0] === "spent") {
-                        return Style.content_accent_first;
-                    }
-                    else if (texts[0] === "unavailable") {
-                        return Style.content_main;
-                    }
-                    else if (texts[0] === "in progress") {
-                        if (texts[1] === "(change)" || texts[1] === "(outgoing)") {
-                            return Style.content_accent_first;
-                        }
-                        else {
-                            return Style.content_accent_third;
-                        }
-                    }
-                    else {
-                        return Style.content_main;
+                function getTextColor(value) {
+                    switch(value) {
+                        case UtxoStatus.Available:
+                            return Style.active;
+                        case UtxoStatus.Maturing:
+                        case UtxoStatus.Spent:
+                        case UtxoStatus.Outgoing:
+                            return Style.accent_outgoing;
+                        case UtxoStatus.Incoming:
+                            return (model && model.type == UtxoType.Change) ?
+                                Style.accent_outgoing :
+                                Style.accent_incoming;
+                        case UtxoStatus.Unavailable:
+                        default:
+                            return Style.content_main;
                     }
                 }
 
                 function secondLineEnabled() {
                     return delegate_id.texts[1] !== undefined;
+                }
+
+                function utxoStatusText(value) {
+                    switch(value) {
+                        case UtxoStatus.Available:
+                            //% "Available"
+                            return qsTrId("utxo-status-available");
+                        case UtxoStatus.Maturing:
+                            //% "Maturing%1(till block height %2)"
+                            return qsTrId("utxo-status-maturing").arg(lineSeparator).arg(model ? model.maturity : "?");
+                        case UtxoStatus.Unavailable:
+                            //% "Unavailable%1(mining result rollback)"
+                            return qsTrId("utxo-status-unavailable").arg(lineSeparator);
+                        case UtxoStatus.Outgoing:
+                            //% "In progress%1(outgoing)"
+                            return qsTrId("utxo-status-outgoing").arg(lineSeparator);
+                        case UtxoStatus.Incoming:
+                            return (model && model.type == UtxoType.Change) ?
+                                //% "In progress%1(change)"
+                                qsTrId("utxo-status-change").arg(lineSeparator) :
+                                //% "In progress%1(incoming)"
+                                qsTrId("utxo-status-incoming").arg(lineSeparator);
+                        case UtxoStatus.Spent:
+                            //% "Spent"
+                            return qsTrId("utxo-status-spent");
+                        default:
+                            return "";
+                    }
                 }
             }
         }
@@ -233,9 +260,53 @@ ColumnLayout {
 
         TableViewColumn {
             role: viewModel.typeRole
-            title: qsTr("Type")
+            //% "Type"
+            title: qsTrId("utxo-head-type")
             width: 150 * parent.width / 800
             movable: false
+            delegate: Item {
+                id: utxoTypeDelegate
+                width: parent.width
+                height: tableView.rowHeight
+                property var utxoType: utxoTypeText(styleData.value)
+
+                ColumnLayout {
+                    anchors.right: parent.right
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    SFLabel {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        color: Style.content_main
+                        elide: Text.ElideRight
+                        text: utxoTypeDelegate.utxoType
+                        textFormat: Text.StyledText
+                        font.pixelSize: 14
+                    }
+                }
+
+                function utxoTypeText(value) {
+                    switch(value) {
+                        //% "Transaction fee"
+                        //: UTXO type fee
+                        case UtxoType.Comission: return qsTrId("general-fee");
+                        //% "Coinbase"
+                        //: UTXO type Coinbase
+                        case UtxoType.Coinbase: return qsTrId("general-coinbase");
+                        //% "Regular"
+                        //: UTXO type Regular
+                        case UtxoType.Regular: return qsTrId("general-regular");
+                        //% "Change"
+                        //: UTXO type Change
+                        case UtxoType.Change: return qsTrId("general-change");
+                        //% "Treasury"
+                        //: UTXO type Treasury
+                        case UtxoType.Treasury: return qsTrId("general-treasury");
+                        default : return "";
+                    }
+                }
+            }
         }
 
         rowDelegate: Item {
@@ -248,7 +319,7 @@ ColumnLayout {
             Rectangle {
                 anchors.fill: parent
 
-                color: Style.background_third
+                color: Style.background_row_even
                 visible: styleData.alternate
             }
         }

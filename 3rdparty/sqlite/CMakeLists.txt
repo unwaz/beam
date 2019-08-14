@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.11)
 
 add_definitions( -DSQLITE_HAS_CODEC)
 
@@ -23,3 +23,7 @@ endif()
 
 target_link_libraries(sqlite PRIVATE OpenSSL::Crypto)
 
+if(ANDROID)
+    # On Android there's no tmp partition, so always use a MEMORY temp store.
+    add_definitions(-DSQLITE_TEMP_STORE=3)
+endif()

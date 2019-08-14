@@ -25,7 +25,8 @@ RowLayout {
         SFText {
             font.pixelSize: 14
             color: Style.content_main
-            text: qsTr("General transaction info")
+            //% "General transaction info"
+            text: qsTrId("tx-details-title")
             font.styleName: "Bold"; font.weight: Font.Bold
             Layout.columnSpan: 2
         }
@@ -33,8 +34,9 @@ RowLayout {
         SFText {
             Layout.alignment: Qt.AlignTop
             font.pixelSize: 14
-            color: Style.content_inconspicuous
-            text: qsTr("Sending address:")
+            color: Style.content_secondary
+            //% "Sending address"
+            text: qsTrId("tx-details-sending-addr-label") + ":"
         }
         SFLabel {
             Layout.fillWidth: true
@@ -52,8 +54,9 @@ RowLayout {
         SFText {
             Layout.alignment: Qt.AlignTop
             font.pixelSize: 14
-            color: Style.content_inconspicuous
-            text: qsTr("Receiving address:")
+            color: Style.content_secondary
+            //% "Receiving address"
+            text: qsTrId("tx-details-receiving-addr-label") + ":"
         }
         SFLabel {
             Layout.fillWidth: true
@@ -71,8 +74,9 @@ RowLayout {
         SFText {
             Layout.alignment: Qt.AlignTop
             font.pixelSize: 14
-            color: Style.content_inconspicuous
-            text: qsTr("Transaction fee:")
+            color: Style.content_secondary
+            //% "Transaction fee"
+            text: qsTrId("general-fee") + ":"
         }
         SFLabel {
             Layout.fillWidth: true
@@ -88,8 +92,9 @@ RowLayout {
         SFText {
             Layout.alignment: Qt.AlignTop
             font.pixelSize: 14
-            color: Style.content_inconspicuous
-            text: qsTr("Comment:")
+            color: Style.content_secondary
+            //% "Comment"
+            text: qsTrId("general-comment") + ":"
         }
         SFLabel {
             Layout.fillWidth: true
@@ -108,8 +113,27 @@ RowLayout {
         SFText {
             Layout.alignment: Qt.AlignTop
             font.pixelSize: 14
-            color: Style.content_inconspicuous
-            text: qsTr("Kernel ID:")
+            color: Style.content_secondary
+            //% "Transaction ID"
+            text: qsTrId("tx-details-tx-id-label") + ":"
+        }
+        SFLabel {
+            Layout.fillWidth: true
+            id: transactionID
+            copyMenuEnabled: true
+            font.pixelSize: 14
+            color: Style.content_main
+            text: model ? model.transactionID : ""
+            font.styleName: "Italic"
+            elide: Text.ElideMiddle
+            onCopyText: textCopied(text)
+        }
+        SFText {
+            Layout.alignment: Qt.AlignTop
+            font.pixelSize: 14
+            color: Style.content_secondary
+            //% "Kernel ID"
+            text: qsTrId("general-kernel-id") + ":"
         }
         SFLabel {
             Layout.fillWidth: true
@@ -126,8 +150,9 @@ RowLayout {
         SFText {
             Layout.alignment: Qt.AlignTop
             font.pixelSize: 14
-            color: Style.content_inconspicuous
-            text: qsTr("Error: ")
+            color: Style.content_secondary
+            //% "Error"
+            text: qsTrId("tx-details-error-label") + ":"
             visible: model ? model.failureReason.length > 0 : false
         }
         SFLabel {
@@ -171,14 +196,16 @@ RowLayout {
         SFText {
             font.pixelSize: 14
             color: Style.content_main
-            text: qsTr("Payment proof")
+            //% "Payment proof"
+            text: qsTrId("general-payment-proof")
             font.styleName: "Bold"; font.weight: Font.Bold
             Layout.columnSpan: 2
         }
         Row {
             spacing: 20
             CustomButton {
-                text: qsTr("details")
+                //% "Details"
+                text: qsTrId("general-details")
                 icon.source: "qrc:/assets/icon-details.svg"
                 icon.width: 21
                 icon.height: 14
@@ -186,7 +213,8 @@ RowLayout {
                 onClicked: showDetails();
             }
             CustomButton {
-                text: qsTr("copy")
+                //% "Copy"
+                text: qsTrId("general-copy")
                 icon.source: "qrc:/assets/icon-copy.svg"
                 enabled: model ? model.hasPaymentProof && !model.isSelfTx() : false
                 onClicked: {

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.11)
 
 find_package(Boost REQUIRED)
 
@@ -15,6 +15,8 @@ set(CORE_SRC
     navigator.cpp
     radixtree.cpp
     merkle.cpp
+    negotiator.cpp
+    lightning.cpp
     proto.cpp
     peer_manager.cpp
     fly_client.cpp
@@ -30,10 +32,12 @@ target_link_libraries(core
         p2p
     PRIVATE
         pbkdf
+        secp256k1
 )
 
+target_include_directories(core PRIVATE ${PROJECT_SOURCE_DIR}/3rdparty/secp256k1-zkp/include)
 target_include_directories(core PRIVATE ${PROJECT_SOURCE_DIR}/3rdparty/secp256k1-zkp/src)
-#target_include_directories(core PRIVATE ${PROJECT_SOURCE_DIR}/3rdparty)
-target_include_directories(core PRIVATE ${PROJECT_SOURCE_DIR}/core)
+target_include_directories(core PRIVATE ${PROJECT_SOURCE_DIR}/3rdparty/)
+target_include_directories(core PUBLIC ${PROJECT_SOURCE_DIR}/core)
 
 add_subdirectory(unittest)

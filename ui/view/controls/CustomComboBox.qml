@@ -10,6 +10,7 @@ ComboBox {
     id: control
     
     spacing: 4
+    property int fontPixelSize: 12
 
     delegate: ItemDelegate {
         id: itemDelegate
@@ -19,7 +20,7 @@ ComboBox {
             color: Style.content_main
             elide: Text.ElideMiddle
             verticalAlignment: Text.AlignVCenter
-			font.pixelSize: 12
+			font.pixelSize: fontPixelSize
         }
 
         highlighted: control.highlightedIndex === index
@@ -28,7 +29,7 @@ ComboBox {
             implicitWidth: 100
             implicitHeight: 20
             opacity: enabled ? 1 : 0.3
-            color:itemDelegate.highlighted ? Style.content_accent_third : Style.content_inconspicuous
+            color:itemDelegate.highlighted ? Style.content_secondary : Style.background_details
         }
     }
 
@@ -44,7 +45,7 @@ ComboBox {
         clip: true
         text: control.currentText
         color: Style.content_main
-		font.pixelSize: 12
+		font.pixelSize: fontPixelSize
         verticalAlignment: Text.AlignVCenter
     }
 
@@ -81,14 +82,14 @@ ComboBox {
 
         background: Item {
             Rectangle {
-                color: Style.content_inconspicuous
+                color: Style.background_details
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: control.height
             }
             Rectangle {
                 anchors.fill: parent
-                color: Style.content_inconspicuous
+                color: Style.background_details
                 radius: 10
             }
         }

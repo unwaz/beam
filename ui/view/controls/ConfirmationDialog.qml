@@ -6,11 +6,26 @@ import "."
 Dialog {
     id: control
     property alias text: messageText.text
+    property alias okButton: okButton
+    property alias okButtonEnable: okButton.enabled
     property alias okButtonText: okButton.text
     property alias okButtonIconSource: okButton.icon.source
+    property alias okButtonVisible: okButton.visible
     property alias okButtonColor: okButton.palette.button
-    property alias cancelVisible : cancelButton.visible
+    property alias cancelButton: cancelButton
+    property alias cancelButtonEnable: cancelButton.enabled
+    property alias cancelButtonText: cancelButton.text
     property alias cancelButtonIconSource: cancelButton.icon.source
+    property alias cancelButtonVisible: cancelButton.visible
+    property alias cancelButtonColor: cancelButton.palette.button
+    function confirmationHandler() {
+        accepted();
+        close();
+    }
+
+    function openHandler() {
+        cancelButton.forceActiveFocus(Qt.TabFocusReason);
+    } 
 
     modal: true
 
@@ -55,7 +70,8 @@ Dialog {
                 CustomButton {
                     id: cancelButton
                     focus: true
-                    text: qsTr("cancel")
+                    //% "Cancel"
+                    text: qsTrId("general-cancel")
                     onClicked: { 
                         rejected();
                         close();
@@ -64,12 +80,12 @@ Dialog {
 
                 CustomButton {
                     id: okButton
-                    palette.button: Style.content_accent_second
-                    text: qsTr("delete")
-                    palette.buttonText: Style.background
+                    palette.button: Style.active
+                    //% "Delete"
+                    text: qsTrId("general-delete")
+                    palette.buttonText: Style.content_opposite
                     onClicked: {
-                        accepted();
-                        close();
+                        confirmationHandler();
                     }
                 }
             }
@@ -80,6 +96,6 @@ Dialog {
     }
 
     onOpened: {
-        cancelButton.forceActiveFocus(Qt.TabFocusReason);
+        openHandler();
     }
 }

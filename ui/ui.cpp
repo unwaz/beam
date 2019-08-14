@@ -24,6 +24,8 @@
 #include "viewmodel/loading_view.h"
 #include "viewmodel/main_view.h"
 #include "viewmodel/utxo_view.h"
+#include "viewmodel/utxo_view_status.h"
+#include "viewmodel/utxo_view_type.h"
 #include "viewmodel/dashboard_view.h"
 #include "viewmodel/address_book_view.h"
 #include "viewmodel/wallet_view.h"
@@ -33,22 +35,19 @@
 #include "viewmodel/messages_view.h"
 #include "viewmodel/statusbar_view.h"
 #include "viewmodel/theme.h"
+#include "viewmodel/receive_view.h"
+#include "viewmodel/send_view.h"
 #include "model/app_model.h"
-
+#include "viewmodel/qml_globals.h"
 #include "wallet/wallet_db.h"
 #include "utility/log_rotation.h"
 #include "core/ecc_native.h"
-
-#include "translator.h"
-
-#include "utility/options.h"
-
+#include "utility/cli/options.h"
 #include <QtCore/QtPlugin>
-
 #include "version.h"
-
 #include "utility/string_helpers.h"
 #include "utility/helpers.h"
+#include "model/translator.h"
 
 #if defined(BEAM_USE_STATIC)
 
@@ -81,11 +80,11 @@ using namespace beam;
 using namespace std;
 using namespace ECC;
 
-#ifdef BEAM_TESTNET
-static const char* AppName = "Beam Wallet Testnet";
+#ifdef APP_NAME
+static const char* AppName = APP_NAME;
 #else
-static const char* AppName = "Beam Wallet";
-#endif // BEAM_TESTNET
+static const char* AppName = "Beam Wallet Masternet";
+#endif
 
 int main (int argc, char* argv[])
 {
@@ -170,13 +169,16 @@ int main (int argc, char* argv[])
         {
             Rules::get().UpdateChecksum();
             LOG_INFO() << "Beam Wallet UI " << PROJECT_VERSION << " (" << BRANCH_NAME << ")";
-            LOG_INFO() << "Rules signature: " << Rules::get().Checksum;
+            LOG_INFO() << "Rules signature: " << Rules::get().get_SignatureStr();
 
+            // AppModel Model MUST BE created before the UI engine and destroyed after.
+            // AppModel serves the UI and UI should be able to access AppModel at any time
+            // even while being destroyed. Do not move engine above AppModel
             WalletSettings settings(appDataDir);
             AppModel appModel(settings);
-
             QQmlApplicationEngine engine;
-
+            Translator translator(settings, engine);
+            
             if (settings.getNodeAddress().isEmpty())
             {
                 if (vm.count(cli::NODE_ADDR))
@@ -193,11 +195,22 @@ int main (int argc, char* argv[])
                         Q_UNUSED(scriptEngine)
                         return new Theme;
                     });
+
+            qmlRegisterSingletonType<QMLGlobals>(
+                    "Beam.Wallet", 1, 0, "BeamGlobals",
+                    [](QQmlEngine* engine, QJSEngine* scriptEngine) -> QObject* {
+                        Q_UNUSED(engine)
+                        Q_UNUSED(scriptEngine)
+                        return new QMLGlobals(*engine);
+                    });
+
             qmlRegisterType<StartViewModel>("Beam.Wallet", 1, 0, "StartViewModel");
             qmlRegisterType<LoadingViewModel>("Beam.Wallet", 1, 0, "LoadingViewModel");
             qmlRegisterType<MainViewModel>("Beam.Wallet", 1, 0, "MainViewModel");
             qmlRegisterType<DashboardViewModel>("Beam.Wallet", 1, 0, "DashboardViewModel");
             qmlRegisterType<WalletViewModel>("Beam.Wallet", 1, 0, "WalletViewModel");
+            qmlRegisterType<UtxoViewStatus>("Beam.Wallet", 1, 0, "UtxoStatus");
+            qmlRegisterType<UtxoViewType>("Beam.Wallet", 1, 0, "UtxoType");
             qmlRegisterType<UtxoViewModel>("Beam.Wallet", 1, 0, "UtxoViewModel");
             qmlRegisterType<SettingsViewModel>("Beam.Wallet", 1, 0, "SettingsViewModel");
             qmlRegisterType<AddressBookViewModel>("Beam.Wallet", 1, 0, "AddressBookViewModel");
@@ -205,6 +218,8 @@ int main (int argc, char* argv[])
             qmlRegisterType<HelpViewModel>("Beam.Wallet", 1, 0, "HelpViewModel");
             qmlRegisterType<MessagesViewModel>("Beam.Wallet", 1, 0, "MessagesViewModel");
             qmlRegisterType<StatusbarViewModel>("Beam.Wallet", 1, 0, "StatusbarViewModel");
+            qmlRegisterType<ReceiveViewModel>("Beam.Wallet", 1, 0, "ReceiveViewModel");
+            qmlRegisterType<SendViewModel>("Beam.Wallet", 1, 0, "SendViewModel");
 
             qmlRegisterType<AddressItem>("Beam.Wallet", 1, 0, "AddressItem");
             qmlRegisterType<ContactItem>("Beam.Wallet", 1, 0, "ContactItem");
@@ -232,7 +247,6 @@ int main (int argc, char* argv[])
 
             window->setMinimumSize(QSize(768, 540));
             window->setFlag(Qt::WindowFullscreenButtonHint);
-
             window->show();
 
             return app.exec();

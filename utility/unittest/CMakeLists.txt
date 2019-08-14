@@ -1,4 +1,8 @@
-#set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+function(add_test_snippet EXE_NAME LIB_NAME)
+    add_executable(${EXE_NAME} ${EXE_NAME}.cpp)
+    target_link_libraries(${EXE_NAME} ${LIB_NAME} ${ARGN})
+    add_test(NAME ${EXE_NAME} COMMAND $<TARGET_FILE:${EXE_NAME}>)
+endfunction()
 
 add_test_snippet(serialize_test utility)
 add_test_snippet(serialization_adapters_test utility)

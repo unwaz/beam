@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.11)
 
 set(TARGET_NAME explorer-node${BEAM_TARGET_SUFFIX})
 
@@ -9,7 +9,7 @@ set(EXPLORER_SRC
     adapter.cpp
 )
 
-configure_file("${PROJECT_SOURCE_DIR}/version.h.in" "${CMAKE_CURRENT_BINARY_DIR}/version.h")
+configure_file("${PROJECT_SOURCE_DIR}/version.h.in" "${CMAKE_CURRENT_SOURCE_DIR}/version.h")
 
 add_library(explorer STATIC ${EXPLORER_SRC})
 
@@ -21,6 +21,7 @@ target_link_libraries(${TARGET_NAME}
     PRIVATE
         explorer
         Boost::boost
+        cli
 )
 
 add_subdirectory(unittest)

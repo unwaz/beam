@@ -1,7 +1,32 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.11)
 
 set (TARGET_NAME "beam-wallet-ui")
 
+function(BEAM_TRANSLATIONS_UPDATE_TS supported_langs out_ts_files)
+    find_package(Qt5LinguistTools)
+    foreach(SUPPORTED_LANG ${supported_langs})
+        set(TS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/i18n/${SUPPORTED_LANG}.ts")
+        list(APPEND TS_FILES "${TS_FILE}")
+        message("update: ${TS_FILE}")
+        execute_process(COMMAND lupdate -recursive -locations none ${CMAKE_CURRENT_SOURCE_DIR} -ts "${TS_FILE}")
+    endforeach()
+    set(${out_ts_files} ${TS_FILES} PARENT_SCOPE)
+endfunction()
+
+function(BEAM_TRANSLATIONS_COMPILE_QM ts_files out_qm_files)
+    find_package(Qt5LinguistTools)
+    foreach(TS_FILE ${ts_files})
+        message("compile: ${TS_FILE}")
+        get_filename_component(TS_FILE_WE ${TS_FILE} NAME_WE)
+        set(QM_FILE_NAME "${TS_FILE_WE}.qm")
+        list(APPEND QM_FILES "${QM_FILE_NAME}")
+        execute_process(COMMAND lrelease -idbased "${TS_FILE}" -qm "${CMAKE_CURRENT_SOURCE_DIR}/${QM_FILE_NAME}")
+        message("compiled translation: ${CMAKE_CURRENT_SOURCE_DIR}/${QM_FILE_NAME}")
+    endforeach()
+    set(${out_qm_files} ${QM_FILES} PARENT_SCOPE)
+endfunction()
+
+set(APP_NAME "Beam Wallet${BEAM_DISPLAY_SUFFIX}")
 if(LINUX)
     set (OUTPUT_NAME "BeamWallet${BEAM_SUFFIX_UPPER_CASE}")
 else()
@@ -31,23 +56,30 @@ if(MSVC)
 
 endif()
 
-find_package(Qt5QuickCompiler)
-if(Qt5QuickCompiler_FOUND)
-	qtquick_compiler_add_resources(QT_RESOURCES view/qml.qrc)
-else()
-    qt5_add_resources(QT_RESOURCES view/qml.qrc)
-endif()
+list(APPEND SUPPORTED_LANGS "en_US")
+list(APPEND SUPPORTED_LANGS "ru_RU")
+list(APPEND SUPPORTED_LANGS "es_ES")
+list(APPEND SUPPORTED_LANGS "be_BY")
+list(APPEND SUPPORTED_LANGS "vi_VI")
+list(APPEND SUPPORTED_LANGS "zh_CN")
+list(APPEND SUPPORTED_LANGS "fr_FR")
+list(APPEND SUPPORTED_LANGS "ja_JP")
+list(APPEND SUPPORTED_LANGS "ko_KR")
+list(APPEND SUPPORTED_LANGS "sv_SE")
+list(APPEND SUPPORTED_LANGS "th_TH")
+list(APPEND SUPPORTED_LANGS "tr_TR")
+list(APPEND SUPPORTED_LANGS "nl_NL")
 
 set(UI_SRC
 	ui.cpp
-	translator.h
-	translator.cpp
 	viewmodel/start_view.h
 	viewmodel/start_view.cpp
     viewmodel/loading_view.h
 	viewmodel/loading_view.cpp
 	viewmodel/utxo_view.h
 	viewmodel/utxo_view.cpp
+    viewmodel/utxo_view_status.h
+    viewmodel/utxo_view_type.h
 	viewmodel/main_view.h
 	viewmodel/main_view.cpp
 	viewmodel/dashboard_view.h
@@ -70,23 +102,56 @@ set(UI_SRC
 	viewmodel/statusbar_view.cpp
 	viewmodel/theme.h
     viewmodel/theme.cpp
+    viewmodel/receive_view.h
+    viewmodel/receive_view.cpp
+    viewmodel/send_view.h
+    viewmodel/send_view.cpp
+    viewmodel/status_holder.cpp
+    viewmodel/status_holder.h
+    viewmodel/tx_object.h
+    viewmodel/tx_object.cpp
+    viewmodel/payment_item.h
+    viewmodel/payment_item.cpp
+    viewmodel/qml_globals.h
+    viewmodel/qml_globals.cpp
 
 	model/wallet_model.h
 	model/wallet_model.cpp
 	model/app_model.h
 	model/app_model.cpp
+    model/keyboard.h
+    model/keyboard.cpp
 	model/settings.h
 	model/settings.cpp
 	model/messages.h
 	model/messages.cpp
 	model/node_model.h
 	model/node_model.cpp
+    model/qr.h
+    model/qr.cpp
+    model/helpers.h
+    model/translator.cpp
+    model/translator.h
 )
 
-find_package(Qt5LinguistTools)
-if (Qt5LinguistTools_FOUND)
-    set(TS_FILES "${CMAKE_CURRENT_SOURCE_DIR}/translations/english.ts")
-    qt5_create_translation(QM_FILES ${CMAKE_CURRENT_SOURCE_DIR} ${TS_FILES})
+beam_translations_update_ts("${SUPPORTED_LANGS}" TS_FILES)
+beam_translations_compile_qm("${TS_FILES}" QM_FILES)
+   
+set(TRANSLATIONS_QRC_FILE_NAME "translations.qrc")
+set(TRANSLATIONS_QRC_FILE "${CMAKE_CURRENT_SOURCE_DIR}/${TRANSLATIONS_QRC_FILE_NAME}")
+
+file(WRITE "${TRANSLATIONS_QRC_FILE}" "<RCC>\n\t<qresource prefix=\"/translations\">\n")
+foreach (QM_FILE ${QM_FILES})
+    file(APPEND "${TRANSLATIONS_QRC_FILE}" "\t\t<file>${QM_FILE}</file>\n")
+endforeach ()
+file(APPEND "${TRANSLATIONS_QRC_FILE}" "\t</qresource>\n</RCC>")
+
+
+find_package(Qt5QuickCompiler)
+if(Qt5QuickCompiler_FOUND)
+    qtquick_compiler_add_resources(QT_RESOURCES view/qml.qrc ${TRANSLATIONS_QRC_FILE})
+else()
+    qt5_add_resources(QT_RESOURCES view/qml.qrc ${TRANSLATIONS_QRC_FILE})
 endif()
 
 if(WIN32)
@@ -100,6 +165,8 @@ elseif(BEAM_MAINNET)
     set(BEAM_ICON_SUFFIX "mainnet")
 endif()
 
+add_definitions(-DAPP_NAME=\"${APP_NAME}\")
+
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/icons/icon_${BEAM_ICON_SUFFIX}.ico
           ${CMAKE_CURRENT_SOURCE_DIR}/icons/beam_${BEAM_ICON_SUFFIX}.png
           ${CMAKE_CURRENT_SOURCE_DIR}/icons/beam_${BEAM_ICON_SUFFIX}.icns
@@ -112,15 +179,29 @@ file(RENAME ${CMAKE_CURRENT_SOURCE_DIR}/beam_${BEAM_ICON_SUFFIX}.icns ${CMAKE_CU
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/beam.rc.in ${CMAKE_CURRENT_SOURCE_DIR}/beam.rc)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/beam.desktop.in ${CMAKE_CURRENT_SOURCE_DIR}/beam.desktop)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in ${CMAKE_CURRENT_SOURCE_DIR}/Info.plist)
-add_executable(${TARGET_NAME} ${SYSTEM_TYPE} ${UI_SRC} ${QT_RESOURCES} beam.rc ${MACOSX_BUNDLE_ICON_FILE} ${QM_FILES})
+if (APPLE)
+    find_library(CARBON_LIBRARY Carbon)
+    if(NOT CARBON_LIBRARY)
+        message(FATAL_ERROR "Carbon framework not found")
+    endif()
+endif()
+add_executable(${TARGET_NAME} ${SYSTEM_TYPE} ${UI_SRC} ${QT_RESOURCES} beam.rc ${MACOSX_BUNDLE_ICON_FILE})
 set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME ${OUTPUT_NAME})
 
-configure_file("${PROJECT_SOURCE_DIR}/version.h.in" "${CMAKE_CURRENT_BINARY_DIR}/version.h")
+if(BEAM_HW_WALLET)
+    target_compile_definitions(${TARGET_NAME} PRIVATE BEAM_HW_WALLET)
+endif()
 
-target_link_libraries(${TARGET_NAME} PRIVATE qrcode)
+configure_file("${PROJECT_SOURCE_DIR}/version.h.in" "${CMAKE_CURRENT_SOURCE_DIR}/version.h")
 
-if(LINUX)
-	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(${TARGET_NAME} PRIVATE qrcode cli)
+if (LINUX)
+    target_link_libraries(${TARGET_NAME} X11)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
+if (APPLE)
+    target_link_libraries(${TARGET_NAME} ${CARBON_LIBRARY})
 endif()
 
 # link with QuaZip library

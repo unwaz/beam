@@ -1,47 +1,53 @@
 
-![alt text](https://forum.beam-mw.com/uploads/beam_mw/original/1X/261e2a2eba2b6c8aadae678673f9e8e09a78f5cf.png "Beam Logo")
+![alt text](https://s3.eu-central-1.amazonaws.com/website-storage.beam.mw/media/homepage/scc/scc-1.jpg "Beam Logo")
+
+### Welcome to Beam
+
 
 BEAM is a next generation scalable, confidential cryptocurrency based on an elegant and innovative [Mimblewimble protocol](https://docs.beam.mw/Mimblewimble.pdf).
 
-[twitter](https://twitter.com/beamprivacy) | [medium](https://medium.com/beam-mw) | [reddit](https://www.reddit.com/r/beamprivacy/) | [beam forum](http://forum.beam-mw.com) | [gitter](https://gitter.im/beamprivacy/Lobby) | [telegram](https://t.me/BeamPrivacy) | [bitcointalk](https://bitcointalk.org/index.php?topic=5052151.0) | [youtube](https://www.youtube.com/channel/UCddqBnfSPWibf4f8OnEJm_w?)
+### ANNOUNCEMENTS
+
+Beam blockchian will **hard fork** on height 321,321 (approximately August 15th). Make sure to upgrade your wallets, nodes and mining software to the latest version. Hard Fork will have the following breaking changes:
+
+* PoW algorithm from Beam Hash I to Beam Hash II. More details on Beam Hash II can be found [here](https://docs.beam.mw/BeamHashII.pdf)
+* SBBS PoW (automatically performed by newer wallets) will become mandatory
+* A minimum fee of ( 10 * Number of kernels + 10 * Number of outputs ) will be enforced by the nodes. The default fee value in the wallet will be changed to 100 Groth
+* Support for Relative Time Locks
 
 
-[Read our position paper](https://docs.beam.mw/BEAM_Position_Paper_v0.2.2.pdf)
 
 
-**MAINNET IS LAUNCHED!** 
+[Download latest version](http://beam.mw/downloads)
+**Clear Cathode 3.0 with Hard Fork Support**
 
-http://beam.mw/downloads
 
-If you build from source please use 'mainnet' branch
+
+### JOIN OUR COMMUNITIES ON TELEGRAM
+
+[English](https://t.me/BeamPrivacy) | [Русский](https://t.me/Beam_RU) | [中文](https://t.me/beamchina) | [日本語](https://t.me/beamjp)
+
+### FOLLOW BEAM 
+
+[twitter](https://twitter.com/beamprivacy) | [medium](https://medium.com/beam-mw) | [reddit](https://www.reddit.com/r/beamprivacy/) | [gitter](https://gitter.im/beamprivacy/Lobby) | [bitcointalk](https://bitcointalk.org/index.php?topic=5052151.0) | [youtube](https://www.youtube.com/channel/UCddqBnfSPWibf4f8OnEJm_w?)
+
+
+### GET STARTED
+
+
+Get Beam binaries here: http://beam.mw/downloads
+
+If you build from source please use 'mainnet' branch\
 
 Peers:
 
-eu-node01.mainnet.beam.mw:8100
+eu-nodes.mainnet.beam.mw:8100
 
-eu-node02.mainnet.beam.mw:8100
+us-nodes.mainnet.beam.mw:8100
 
-eu-node03.mainnet.beam.mw:8100
+ap-nodes.mainnet.beam.mw:8100
 
-eu-node04.mainnet.beam.mw:8100
-
-us-node01.mainnet.beam.mw:8100
-
-us-node02.mainnet.beam.mw:8100
-
-us-node03.mainnet.beam.mw:8100
-
-us-node04.mainnet.beam.mw:8100
-
-ap-node01.mainnet.beam.mw:8100
-
-ap-node02.mainnet.beam.mw:8100
-
-ap-node03.mainnet.beam.mw:8100
-
-ap-node04.mainnet.beam.mw:8100
-
-Latest docs are here: https://beam-docs.readthedocs.io/en/latest/index.html
+Latest documentation is here: https://documentation.beam.mw
 
 Things that make BEAM special include:
 
@@ -60,14 +66,15 @@ transactions, atomic swaps and more.
 years.
 * Implemented from scratch in C++.
 
-# Roadmap
+[Read our position paper](https://docs.beam.mw/BEAM_Position_Paper_v0.2.2.pdf)
 
-- March 2018     : Project started
-- June 2018      : Internal POC featuring fully functional node and CLI wallet
-- September 2018 : Testnet 1 and Desktop Wallet App (Windows, Mac, Linux)
-- December 2018  : Mainnet launch
+### Roadmap
 
-# Current status
+See Beam roadmap for 2019 on https://beam.mw
+
+### Current status
+
+#### Mainnet(January 3rd 2019)
 
 - Fully functional wallet with key generator and storage supporting secure and confidential online transactions.
 - Full node with both transaction and block validation and full UTXO state management.
@@ -77,6 +84,17 @@ years.
 - Offline transactions using Secure BBS system
 - ChainWork - sublinear blockchain validation, based on FlyClient idea by Loi Luu, Benedikt Bünz, Mahdi Zamani
 - Compact history using cut through
+
+#### Agile Atom (February 2019)
+
+- Payment and Exchange APIs
+- Mining Pool APIs
+- Lightning Network position paper
+
+#### Bright Boson 2.0 (March 2019)
+- Payment proof
+- Ultra fast sync
+- Android Mobile wallet
 
 See [How to build](https://github.com/BeamMW/beam/wiki/How-to-build)
 

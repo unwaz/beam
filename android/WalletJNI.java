@@ -46,13 +46,13 @@ public class WalletJNI
 
 		if(api.isWalletInitialized("test"))
 		{
-			wallet = api.openWallet(nodeAddr, "test", "123");
+			wallet = api.openWallet("1.0.0.0", nodeAddr, "test", "123");
 
 			System.out.println(wallet == null ? "wallet opening error" : "wallet successfully opened");
 		}
 		else
 		{
-			wallet = api.createWallet(nodeAddr, "test", "123", "garbage;wild;fruit;vicious;jungle;snack;arrange;pink;scorpion;speed;used;frozen;");
+			wallet = api.createWallet("1.0.0.0", nodeAddr, "test", "123", "garbage;wild;fruit;vicious;jungle;snack;arrange;pink;scorpion;speed;used;frozen;", false);
 
 			System.out.println(wallet == null ? "wallet creation error" : "wallet successfully created");
 		}
@@ -85,7 +85,7 @@ public class WalletJNI
 				{
 					sendAttempt = true;
 
-					wallet.sendMoney("fbac2507faf499581aff0a2b97bccf5e4705aa36714ca14a529e98e8c4641ab7", "test comment", 1500, 10);
+					wallet.sendMoney("", "fbac2507faf499581aff0a2b97bccf5e4705aa36714ca14a529e98e8c4641ab7", "test comment", 1500, 10);
 				}
 			}
 			try

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.11)
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
@@ -18,11 +18,13 @@ set(UTILITY_SRC
     log_rotation.cpp
     helpers.cpp
     config.cpp
-	options.cpp
 	string_helpers.cpp
 	asynccontext.cpp
+	fsutils.cpp
 # ~etc
 )
+
+set(CLI_SRC cli/options.cpp)
 
 set(IO_SRC
     io/buffer.cpp
@@ -52,17 +54,18 @@ if (BEAM_USE_AVX)
     endif()
 endif()
 
+
 if (MSVC)
     set_source_files_properties(logger.cpp PROPERTIES COMPILE_FLAGS "/wd4996") # 'std::fpos<_Mbstatet>::seekpos': warning STL4019: The member std::fpos::seekpos() is non-Standard
 endif()
 
 add_library(utility STATIC ${UTILITY_SRC} ${IO_SRC})
 
-if(ANDROID OR NOT BEAM_USE_AVX)
-    add_library(crypto STATIC ${PROJECT_SOURCE_DIR}/3rdparty/crypto/blake/ref/blake2b-ref.c)
-else()
-    add_library(crypto STATIC ${PROJECT_SOURCE_DIR}/3rdparty/crypto/blake/sse/blake2b.cpp)
-endif()
+#if(NOT ANDROID)
+    add_library(cli STATIC ${CLI_SRC})
+    target_link_libraries(cli PUBLIC Boost::program_options)
+
+#endif()
 
 if (UV_INTERNAL)
      target_link_libraries(utility PRIVATE uv_a)
@@ -99,7 +102,7 @@ if(ANDROID)
     endif()
 
 else()
-    target_link_libraries(utility PRIVATE Boost::program_options Boost::filesystem Boost::system)
+    target_link_libraries(utility PRIVATE Boost::filesystem Boost::system)
 endif()
 
 target_link_libraries(utility

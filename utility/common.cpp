@@ -57,6 +57,11 @@ namespace beam
 		return sRet;
 	}
 
+	std::wstring Utf8toUtf16(const std::string& str)
+	{
+	    return Utf8toUtf16(str.c_str());
+	}
+
 	bool DeleteFile(const char* sz)
 	{
 		return ::DeleteFileW(Utf8toUtf16(sz).c_str()) != FALSE;
@@ -278,7 +283,7 @@ void MiniDumpWriteGuarded(EXCEPTION_POINTERS* pExc)
 
 	MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, MiniDumpNormal, &mdei, NULL, NULL);
 
-	verify(CloseHandle(hFile));
+    BEAM_VERIFY(CloseHandle(hFile));
 
 }
 

@@ -52,7 +52,9 @@ Rectangle {
                     font.weight: Font.Bold
                     color: Style.content_main
                     opacity: 0.6
-                    text: qsTr("RECEIVING")
+                    //% "receiving"
+                    text: qsTrId("general-receiving")
+                    font.capitalization: Font.AllUppercase
                 }
 
                 SFLabel {
@@ -65,7 +67,7 @@ Rectangle {
                     font.pixelSize: 20
                     fontSizeMode: Text.Fit
                     minimumPixelSize: 14
-                    color: Style.content_accent_third
+                    color: Style.accent_incoming
                     text: (receiving !== "0") ? "+" + receiving : receiving;
                     elide: Text.ElideRight
                     copyMenuEnabled: true
@@ -92,7 +94,9 @@ Rectangle {
                     font.weight: Font.Bold
                     color: Style.content_main
                     opacity: 0.6
-                    text: qsTr("SENDING")
+                    //% "sending"
+                    text: qsTrId("general-sending")
+                    font.capitalization: Font.AllUppercase
                 }
 
                 SFLabel {
@@ -105,7 +109,7 @@ Rectangle {
                     font.pixelSize: 20
                     fontSizeMode: Text.Fit
                     minimumPixelSize: 14
-                    color: Style.content_accent_first
+                    color: Style.accent_outgoing
                     text: (sending !== "0") ? "-" + sending : sending;
                     elide: Text.ElideRight
                     copyMenuEnabled: true
@@ -132,7 +136,9 @@ Rectangle {
                     font.weight: Font.Bold
                     color: Style.content_main
                     opacity: 0.6
-                    text: qsTr("MATURING")
+                    //% "Maturing"
+                    text: qsTrId("secondary-panel-maturing")
+                    font.capitalization: Font.AllUppercase
                 }
 
                 SFLabel {

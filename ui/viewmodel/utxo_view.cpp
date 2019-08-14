@@ -16,6 +16,7 @@
 #include "ui_helpers.h"
 #include "model/app_model.h"
 using namespace beam;
+using namespace beam::wallet;
 using namespace std;
 using namespace beamui;
 
@@ -30,7 +31,7 @@ bool compareUtxo(const T& lf, const T& rt, Qt::SortOrder sortOrder)
 }
 }
 
-UtxoItem::UtxoItem(const beam::Coin& coin)
+UtxoItem::UtxoItem(const beam::wallet::Coin& coin)
     : _coin{ coin }
 {
 
@@ -53,43 +54,41 @@ QString UtxoItem::maturity() const
     return QString::number(_coin.m_maturity);
 }
 
-QString UtxoItem::status() const
+UtxoViewStatus::EnStatus UtxoItem::status() const
 {
     switch(_coin.m_status)
     {
         case Coin::Available:
-            return tr("available");
+            return UtxoViewStatus::Available;
         case Coin::Maturing:
-            return tr("maturing\n(till block height ") + QString::number(_coin.m_maturity) + ")";
+            return UtxoViewStatus::Maturing;
         case Coin::Unavailable:
-            return tr("unavailable\n(mining result rollback)");
+            return UtxoViewStatus::Unavailable;
         case Coin::Outgoing:
-            return tr("in progress\n(outgoing)");
+            return UtxoViewStatus::Outgoing;
         case Coin::Incoming:
-			return (_coin.m_ID.m_Type == Key::Type::Change) ?
-				tr("in progress\n(change)") :
-				tr("in progress\n(incoming)");
+			return UtxoViewStatus::Incoming;
         case Coin::Spent:
-            return tr("spent");
+            return UtxoViewStatus::Spent;
         default:
             assert(false && "Unknown key type");
     }
 
-    return "";
+    return UtxoViewStatus::Undefined;
 }
 
-QString UtxoItem::type() const
+UtxoViewType::EnType UtxoItem::type() const
 {
     switch (_coin.m_ID.m_Type)
     {
-    case Key::Type::Comission: return tr("Transaction fee");
-    case Key::Type::Coinbase: return tr("Coinbase");
-    case Key::Type::Regular: return tr("Regular");
-    case Key::Type::Change: return tr("Change");
-    case Key::Type::Treasury: return tr("Treasury");
+        case Key::Type::Comission: return UtxoViewType::Comission;
+        case Key::Type::Coinbase: return UtxoViewType::Coinbase;
+        case Key::Type::Regular: return UtxoViewType::Regular;
+        case Key::Type::Change: return UtxoViewType::Change;
+        case Key::Type::Treasury: return UtxoViewType::Treasury;
     }
 
-    return FourCC::Text(_coin.m_ID.m_Type).m_sz;
+    return UtxoViewType::Undefined;
 }
 
 beam::Amount UtxoItem::rawAmount() const
@@ -97,7 +96,7 @@ beam::Amount UtxoItem::rawAmount() const
     return _coin.m_ID.m_Value;
 }
 
-const beam::Coin::ID& UtxoItem::get_ID() const
+const beam::wallet::Coin::ID& UtxoItem::get_ID() const
 {
 	return _coin.m_ID;
 }
@@ -109,12 +108,12 @@ beam::Height UtxoItem::rawMaturity() const
 
 
 UtxoViewModel::UtxoViewModel()
-    : _model{*AppModel::getInstance()->getWallet()}
+    : _model{*AppModel::getInstance().getWallet()}
     , _sortOrder(Qt::DescendingOrder)
 {
-    connect(&_model, SIGNAL(allUtxoChanged(const std::vector<beam::Coin>&)),
-        SLOT(onAllUtxoChanged(const std::vector<beam::Coin>&)));
-    connect(&_model, SIGNAL(walletStatus(const WalletStatus&)), SLOT(onStatus(const WalletStatus&)));
+    connect(&_model, SIGNAL(allUtxoChanged(const std::vector<beam::wallet::Coin>&)),
+        SLOT(onAllUtxoChanged(const std::vector<beam::wallet::Coin>&)));
+    connect(&_model, SIGNAL(walletStatus(const beam::wallet::WalletStatus&)), SLOT(onStatus(const beam::wallet::WalletStatus&)));
 
     _model.getAsync()->getUtxosStatus();
 }
@@ -161,7 +160,7 @@ void UtxoViewModel::setSortOrder(Qt::SortOrder value)
     sortUtxos();
 }
 
-void UtxoViewModel::onAllUtxoChanged(const std::vector<beam::Coin>& utxos)
+void UtxoViewModel::onAllUtxoChanged(const std::vector<beam::wallet::Coin>& utxos)
 {
     // TODO: It's dirty hack. Should use QAbstractListModel instead of QQmlListProperty
     auto tmpList = _allUtxos;

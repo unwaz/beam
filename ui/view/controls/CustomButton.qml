@@ -9,7 +9,7 @@ import "."
 Button {
     id: control
     
-    palette.button: Style.background_emphasize_alternate
+    palette.button: Style.separator
     palette.buttonText: Style.content_main
     property alias textOpacity: rect.opacity
     property alias shadowSamples: drop_shadow.samples
@@ -19,6 +19,7 @@ Button {
         family: "SF Pro Display"
         pixelSize: 14
         styleName: "Bold"; weight: Font.Bold
+        capitalization: Font.AllLowercase
     }
 
 //    width: 122

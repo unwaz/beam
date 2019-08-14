@@ -37,6 +37,11 @@ void NodeModel::setKdf(beam::Key::IKdf::Ptr kdf)
     m_nodeClient.setKdf(kdf);
 }
 
+void NodeModel::setOwnerKey(beam::Key::IPKdf::Ptr key)
+{
+    m_nodeClient.setOwnerKey(key);
+}
+
 void NodeModel::startNode()
 {
     m_nodeClient.startNode();
@@ -72,36 +77,64 @@ void NodeModel::onStoppedNode()
     emit stoppedNode();
 }
 
-void NodeModel::onFailedToStartNode()
-{
-    emit failedToStartNode(beam::wallet::ErrorType::InternalNodeStartFailed);
-}
-
 void NodeModel::onFailedToStartNode(io::ErrorCode errorCode)
 {
     emit failedToStartNode(wallet::getWalletError(errorCode));
 }
 
+void NodeModel::onNodeCreated()
+{
+    emit createdNode();
+}
+
+void NodeModel::onNodeDestroyed()
+{
+    emit destroyedNode();
+}
+
+void NodeModel::onSyncError(beam::Node::IObserver::Error error)
+{
+    switch(error)
+    {
+        case Node::IObserver::Error::TimeDiffToLarge:
+        {   
+            emit failedToSyncNode(
+                wallet::getWalletError(
+                    proto::NodeProcessingException::Type::TimeOutOfSync));
+            break;
+        }
+        case Node::IObserver::Error::Unknown:
+        {
+            emit failedToStartNode(wallet::ErrorType::InternalNodeStartFailed);
+            break;
+        }
+        default:
+        {
+            assert(false);
+        }
+    }
+}
+
 uint16_t NodeModel::getLocalNodePort()
 {
-    return AppModel::getInstance()->getSettings().getLocalNodePort();
+    return AppModel::getInstance().getSettings().getLocalNodePort();
 }
 
 std::string NodeModel::getLocalNodeStorage()
 {
-    return AppModel::getInstance()->getSettings().getLocalNodeStorage();
+    return AppModel::getInstance().getSettings().getLocalNodeStorage();
 }
 
 std::string NodeModel::getTempDir()
 {
-    return AppModel::getInstance()->getSettings().getTempDir();
+    return AppModel::getInstance().getSettings().getTempDir();
 }
 
 std::vector<std::string> NodeModel::getLocalNodePeers()
 {
     std::vector<std::string> result;
 
-    auto peers = AppModel::getInstance()->getSettings().getLocalNodePeers();
+    auto peers = AppModel::getInstance().getSettings().getLocalNodePeers();
 
     for (const auto& peer : peers)
     {
@@ -109,4 +142,8 @@ std::vector<std::string> NodeModel::getLocalNodePeers()
     }
 
     return result;
+}
+
+void NodeModel::onNodeThreadFinished()
+{
 }

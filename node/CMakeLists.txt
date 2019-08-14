@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.11)
 
 find_package(Boost REQUIRED)
 
@@ -28,3 +28,4 @@ target_link_libraries(node
 )
 
 add_subdirectory(unittests)
+add_subdirectory(laser_beam_demo)

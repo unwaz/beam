@@ -6,16 +6,29 @@ import "controls"
 import Beam.Wallet 1.0
 
 Window  {
-    width: Math.min(1024, Screen.desktopAvailableWidth - 10)
-    height: Math.min(768, Screen.desktopAvailableHeight - 80)
+    id: appWindow
     property alias source: rootLoader.source
+    flags: Qt.Window | Qt.WindowFullscreenButtonHint
+
+    function cellResize() {
+        if(appWindow.visibility != ApplicationWindow.Maximized) {
+            var minWidth = Math.min(1024, Screen.desktopAvailableWidth - 10);
+            var minHeight = Math.min(867, Screen.desktopAvailableHeight - 80);
+            appWindow.minimumWidth = minWidth;
+            appWindow.minimumHeight = minHeight;
+            appWindow.width = minWidth;
+            appWindow.height = minHeight;
+        }
+    }
+ 
+    onVisibilityChanged: cellResize()
 
     SFFontLoader {}
     
     Popup {
         id: notifications
         closePolicy: Popup.NoAutoClose
-        palette.window : Style.background
+        palette.window : Style.background_main
 		MessagesViewModel {id: viewModel}
 
         parent: Overlay.overlay
@@ -72,5 +85,12 @@ Window  {
         height: parent.height
 	    focus: true
         source : "qrc:/start.qml"
+        signal activated()
+    }
+
+    onActiveChanged: {
+        if (this.active) {
+            rootLoader.activated();
+        }
     }
 }

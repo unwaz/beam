@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.11)
 
 set(TARGET_NAME wallet-jni)
 
@@ -8,14 +8,14 @@ set(SRC
     wallet_model.cpp 
     common.h 
     common.cpp 
-    #node_model.h 
-    #node_model.cpp
+    node_model.h 
+    node_model.cpp
 )
 
 add_library(${TARGET_NAME} SHARED ${SRC})
 target_link_libraries(${TARGET_NAME} PRIVATE wallet utility)
 
-configure_file("${PROJECT_SOURCE_DIR}/version.h.in" "${CMAKE_CURRENT_BINARY_DIR}/version.h")
+configure_file("${PROJECT_SOURCE_DIR}/version.h.in" "${CMAKE_CURRENT_SOURCE_DIR}/version.h")
 target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 if(ANDROID)
@@ -40,6 +40,7 @@ else()
 			com/mw/beam/beamwallet/core/entities/dto/SystemStateDTO.java
 			com/mw/beam/beamwallet/core/entities/dto/WalletStatusDTO.java
             com/mw/beam/beamwallet/core/entities/dto/WalletAddressDTO.java
+            com/mw/beam/beamwallet/core/entities/dto/PaymentInfoDTO.java
 			com/mw/beam/beamwallet/core/listeners/WalletListener.java
 		ENTRY_POINT WalletJNI
 	)

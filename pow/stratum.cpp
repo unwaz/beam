@@ -42,7 +42,6 @@ Method get_method(const std::string& str) {
 }
 
 std::string get_result_msg(int code) {
-    if (code == 0) return std::string();
     switch (code) {
 #define R_MESSAGE(code, _, message) case code: return message;
     STRATUM_RESULTS(R_MESSAGE)
@@ -67,6 +66,8 @@ namespace {
     DEF_LABEL(nonce);
     DEF_LABEL(output);
     DEF_LABEL(height);
+    DEF_LABEL(nonceprefix);
+    DEF_LABEL(forkheight);
 #undef DEF_LABEL
 
 ResultCode parse_json(const void* buf, size_t bufSize, json& o) {
@@ -122,6 +123,7 @@ template<> void parse(const json& o, Solution& m) {
 template<> void parse(const json& o, Result& m) {
     m.code = o[l_code];
     m.description = o[l_description];
+    m.nonceprefix = o.value(l_nonceprefix, std::string());
 }
 
 } //namespace
@@ -200,6 +202,8 @@ bool append_json_msg(io::FragmentWriter& packer, const Result& m) {
     append_base(o, m);
     o[l_code] = m.code;
     o[l_description] = m.description;
+    if (!m.nonceprefix.empty()) o[l_nonceprefix] = m.nonceprefix;
+    if (m.forkheight != MaxHeight) o[l_forkheight] = m.forkheight;	
     return serialize_json_msg(packer, o);
 }
 
