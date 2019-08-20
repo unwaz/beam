@@ -516,7 +516,8 @@ void ExpireByResponseTime(bool isBeamSide)
     sender->m_Wallet.initBitcoin(*mainReactor, aliceOptions);
 
     auto db = createReceiverWalletDB();
-    WalletAddress receiverWalletAddress = storage::createAddress(*db, db->get_MasterKdf());
+    LocalPrivateKeyKeeper keyKeeper(db);
+    WalletAddress receiverWalletAddress = storage::createAddress(*db, keyKeeper);
     WalletID receiverWalletID = receiverWalletAddress.m_walletID;
 
     TxID txID = sender->m_Wallet.swap_coins(sender->m_WalletID, receiverWalletID, beamAmount, beamFee,

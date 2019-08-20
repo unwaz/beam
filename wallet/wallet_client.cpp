@@ -409,7 +409,7 @@ namespace beam::wallet
             auto s = m_wallet.lock();
             if (s)
             {
-                WalletAddress senderAddress = storage::createAddress(*m_walletDB, s->getKeyKeeper()->get_SbbsKdf());
+                WalletAddress senderAddress = storage::createAddress(*m_walletDB, *s->getKeyKeeper());
                 saveAddress(senderAddress, true); // should update the wallet_network
 
                 ByteBuffer message(comment.begin(), comment.end());
@@ -558,7 +558,7 @@ namespace beam::wallet
             auto s = m_wallet.lock();
             if (s)
             {
-                WalletAddress address = storage::createAddress(*m_walletDB, s->getKeyKeeper()->get_SbbsKdf());
+                WalletAddress address = storage::createAddress(*m_walletDB, *s->getKeyKeeper());
 
                 onGeneratedNewAddress(address);
             }

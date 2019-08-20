@@ -168,15 +168,17 @@ void test_offline(bool twoNodes) {
         receiverParams.nodeAddress = nodeAddress;
     }
 
+    LocalPrivateKeyKeeper keyKeeper(senderParams.walletDB);
+
     senderParams.reactor = io::Reactor::create();
     senderParams.walletDB = init_wallet_db("_sender", &nodeParams.walletSeed, senderParams.reactor);
     receiverParams.reactor = io::Reactor::create();
     receiverParams.walletDB = init_wallet_db("_receiver", 0, receiverParams.reactor);
 
-	WalletAddress wa = storage::createAddress(*senderParams.walletDB, senderParams.walletDB->get_MasterKdf());
+	WalletAddress wa = storage::createAddress(*senderParams.walletDB, keyKeeper);
 	senderParams.walletDB->saveAddress(wa);
 	senderParams.sendFrom = wa.m_walletID;
-    wa = storage::createAddress(*senderParams.walletDB, senderParams.walletDB->get_MasterKdf());
+    wa = storage::createAddress(*senderParams.walletDB, keyKeeper);
     receiverParams.walletDB->saveAddress(wa);
 	senderParams.sendTo = wa.m_walletID;
 

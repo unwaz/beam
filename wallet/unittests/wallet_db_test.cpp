@@ -550,13 +550,15 @@ void TestAddresses()
     addresses = db->getAddresses(false);
     WALLET_CHECK(addresses.empty());
 
+    LocalPrivateKeyKeeper keyKeeper(db);
+
     WalletAddress a = {};
     a.m_label = "test label";
     a.m_category = "test category";
     a.m_createTime = beam::getTimestamp();
     a.m_duration = 23;
     a.m_OwnID = 44;
-    a.m_walletID = storage::generateWalletIDFromIndex(db->get_MasterKdf(), a.m_OwnID);
+    a.m_walletID = storage::generateWalletIDFromIndex(keyKeeper, a.m_OwnID);
 
     db->saveAddress(a);
 
@@ -594,7 +596,7 @@ void TestAddresses()
     a2 = db->getAddress(a.m_walletID);
     WALLET_CHECK(!a2.is_initialized());
 
-    WALLET_CHECK(storage::ImportDataFromJson(*db, db->get_MasterKdf(), &exported[0], exported.size()));
+    WALLET_CHECK(storage::ImportDataFromJson(*db, keyKeeper, &exported[0], exported.size()));
     {
         auto a3 = db->getAddress(a.m_walletID);
         WALLET_CHECK(a3.is_initialized());
@@ -602,7 +604,7 @@ void TestAddresses()
     }
 
     // check double import
-    WALLET_CHECK(storage::ImportDataFromJson(*db, db->get_MasterKdf(), &exported[0], exported.size()));
+    WALLET_CHECK(storage::ImportDataFromJson(*db, keyKeeper, &exported[0], exported.size()));
     {
         auto a3 = db->getAddress(a.m_walletID);
         WALLET_CHECK(a3.is_initialized());
@@ -614,10 +616,11 @@ void TestExportImportTx()
 {
     cout << "\nWallet database transactions export/import test\n";
     auto walletDB = createSqliteWalletDB();
+    LocalPrivateKeyKeeper keyKeeper(walletDB);
 
     WalletAddress wa;
     wa.m_OwnID = (*walletDB).AllocateKidRange(1);
-    wa.m_walletID = storage::generateWalletIDFromIndex(walletDB->get_MasterKdf(), wa.m_OwnID);
+    wa.m_walletID = storage::generateWalletIDFromIndex(keyKeeper, wa.m_OwnID);
     TxDescription tr;
     tr.m_txId = {{4, 5, 6, 7, 65}};
     tr.m_amount = 52;
@@ -638,7 +641,7 @@ void TestExportImportTx()
 
     WalletAddress wa2;
     wa2.m_OwnID = (*walletDB).AllocateKidRange(1);
-    wa2.m_walletID = storage::generateWalletIDFromIndex(walletDB->get_MasterKdf(), wa2.m_OwnID);
+    wa2.m_walletID = storage::generateWalletIDFromIndex(keyKeeper, wa2.m_OwnID);
     TxDescription tr2;
     tr2.m_txId = {{7, 8, 9, 13}};
     tr2.m_amount = 71;
@@ -654,7 +657,7 @@ void TestExportImportTx()
     auto exported = storage::ExportDataToJson(*walletDB);
     walletDB->deleteTx(tr.m_txId);
     WALLET_CHECK(walletDB->getTxHistory().size() == 1);
-    WALLET_CHECK(storage::ImportDataFromJson(*walletDB, walletDB->get_MasterKdf(), &exported[0], exported.size()));
+    WALLET_CHECK(storage::ImportDataFromJson(*walletDB, keyKeeper, &exported[0], exported.size()));
     auto _tr = walletDB->getTx(tr.m_txId);
     WALLET_CHECK(_tr.is_initialized());
     WALLET_CHECK(_tr.value().m_createTime == tr.m_createTime);
@@ -671,7 +674,7 @@ void TestExportImportTx()
     exported = storage::ExportDataToJson(*walletDB);
     walletDB->deleteTx(tr2.m_txId);
     WALLET_CHECK(walletDB->getTxHistory().size() == 1);
-    WALLET_CHECK(storage::ImportDataFromJson(*walletDB, walletDB->get_MasterKdf(), &exported[0], exported.size()));
+    WALLET_CHECK(storage::ImportDataFromJson(*walletDB, keyKeeper, &exported[0], exported.size()));
     WALLET_CHECK(walletDB->getTxHistory().size() == 1);
     _tr = walletDB->getTx(tr2.m_txId);
     WALLET_CHECK(!_tr.is_initialized());

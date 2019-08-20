@@ -228,6 +228,7 @@ namespace
                 , _wallet(wallet)
                 , _api(*this, acl)
                 , _wnet(wnet)
+                , _keyKeeper(std::make_shared<LocalPrivateKeyKeeper>(_walletDB))
             {
                 _walletDB->subscribe(this);
             }
@@ -299,7 +300,7 @@ namespace
             {
                 LOG_DEBUG() << "CreateAddress(id = " << id << ")";
 
-                WalletAddress address = storage::createAddress(*_walletDB, _walletDB->get_MasterKdf());
+                WalletAddress address = storage::createAddress(*_walletDB, *_keyKeeper);
                 FillAddressData(data, address);
 
                 _walletDB->saveAddress(address);
@@ -396,7 +397,7 @@ namespace
                     }
                     else
                     {
-                        WalletAddress senderAddress = storage::createAddress(*_walletDB, _walletDB->get_MasterKdf());
+                        WalletAddress senderAddress = storage::createAddress(*_walletDB, *_keyKeeper);
                         _walletDB->saveAddress(senderAddress);
 
                         from = senderAddress.m_walletID;     
@@ -471,7 +472,7 @@ namespace
                 LOG_DEBUG() << "], fee = " << data.fee;
                 try
                 {
-                     WalletAddress senderAddress = storage::createAddress(*_walletDB, _walletDB->get_MasterKdf());
+                     WalletAddress senderAddress = storage::createAddress(*_walletDB, *_keyKeeper);
                     _walletDB->saveAddress(senderAddress);
 
                     if (data.fee < MinimumFee)
@@ -701,6 +702,7 @@ namespace
             Wallet& _wallet;
             WalletApi _api;
             IWalletMessageEndpoint& _wnet;
+            IPrivateKeyKeeper::Ptr _keyKeeper;
         };
 
         class TcpApiConnection : public ApiConnection

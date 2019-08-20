@@ -2732,19 +2732,19 @@ namespace beam::wallet
             });
         }
 
-        WalletAddress createAddress(IWalletDB& walletDB, Key::IKdf::Ptr sbbsKdf)
+        WalletAddress createAddress(IWalletDB& walletDB, IPrivateKeyKeeper& keyKeeper)
         {
             WalletAddress newAddress;
             newAddress.m_createTime = beam::getTimestamp();
             newAddress.m_OwnID = walletDB.AllocateKidRange(1);
-            newAddress.m_walletID = generateWalletIDFromIndex(sbbsKdf, newAddress.m_OwnID);
+            newAddress.m_walletID = generateWalletIDFromIndex(keyKeeper, newAddress.m_OwnID);
 
             return newAddress;
         }
 
-        WalletID generateWalletIDFromIndex(Key::IKdf::Ptr sbbsKdf, uint64_t ownID)
+        WalletID generateWalletIDFromIndex(IPrivateKeyKeeper& keyKeeper, uint64_t ownID)
         {
-            if (!sbbsKdf)
+            if (!keyKeeper.get_SbbsKdf())
             {
                 throw CannotGenerateSecretException();
             }
@@ -2752,7 +2752,7 @@ namespace beam::wallet
 
             ECC::Scalar::Native sk;
 
-            sbbsKdf->DeriveKey(sk, Key::ID(ownID, Key::Type::Bbs));
+            keyKeeper.get_SbbsKdf()->DeriveKey(sk, Key::ID(ownID, Key::Type::Bbs));
 
             proto::Sk2Pk(walletID.m_Pk, sk);
 
@@ -2823,7 +2823,7 @@ namespace beam::wallet
             const string OwnAddressesName = "OwnAddresses";
             const string TransactionParametersName = "TransactionParameters";
 
-            bool ImportAddressesFromJson(IWalletDB& db, Key::IKdf::Ptr sbbsKdf, const json& obj)
+            bool ImportAddressesFromJson(IWalletDB& db, IPrivateKeyKeeper& keyKeeper, const json& obj)
             {
                 if (obj.find(OwnAddressesName) == obj.end())
                 {
@@ -2837,7 +2837,7 @@ namespace beam::wallet
                     if (address.m_walletID.FromHex(jsonAddress["WalletID"]))
                     {
                         address.m_OwnID = jsonAddress["Index"];
-                        if (address.m_walletID == generateWalletIDFromIndex(sbbsKdf, address.m_OwnID))
+                        if (address.m_walletID == generateWalletIDFromIndex(keyKeeper, address.m_OwnID))
                         {
                             //{ "SubIndex", 0 },
                             address.m_label = jsonAddress["Label"];
@@ -2855,7 +2855,7 @@ namespace beam::wallet
                 return true;
             }
 
-            bool ImportTransactionsFromJson(IWalletDB& db, Key::IKdf::Ptr sbbsKdf, const json& obj)
+            bool ImportTransactionsFromJson(IWalletDB& db, IPrivateKeyKeeper& keyKeeper, const json& obj)
             {
                 if (obj.find(TransactionParametersName) == obj.end())
                 {
@@ -2897,7 +2897,7 @@ namespace beam::wallet
                     }
 
                     auto waddr = db.getAddress(wid);
-                    if (waddr && (waddr->m_OwnID == 0 || wid != generateWalletIDFromIndex(sbbsKdf, waddr->m_OwnID)))
+                    if (waddr && (waddr->m_OwnID == 0 || wid != generateWalletIDFromIndex(keyKeeper, waddr->m_OwnID)))
                     {
                         LOG_ERROR() << "Transaction " << txPair.first << " was not imported. Invalid address parameter";
                         continue;
@@ -2905,7 +2905,7 @@ namespace beam::wallet
 
                     auto addressIt = paramsMap.find(TxParameterID::MyAddressID);
                     if (addressIt != paramsMap.end() && (!fromByteBuffer(addressIt->second.m_value, myAddrId) ||
-                        wid != generateWalletIDFromIndex(sbbsKdf, myAddrId)))
+                        wid != generateWalletIDFromIndex(keyKeeper, myAddrId)))
                     {
                         LOG_ERROR() << "Transaction " << txPair.first << " was not imported. Invalid MyAddressID parameter";
                         continue;
@@ -2981,12 +2981,12 @@ namespace beam::wallet
             return res.dump();
         }
 
-        bool ImportDataFromJson(IWalletDB& db, Key::IKdf::Ptr sbbsKdf, const char* data, size_t size)
+        bool ImportDataFromJson(IWalletDB& db, IPrivateKeyKeeper& keyKeeper, const char* data, size_t size)
         {
             try
             {
                 json obj = json::parse(data, data + size);
-                return ImportAddressesFromJson(db, sbbsKdf, obj) && ImportTransactionsFromJson(db, sbbsKdf, obj);
+                return ImportAddressesFromJson(db, keyKeeper, obj) && ImportTransactionsFromJson(db, keyKeeper, obj);
             }
             catch (const nlohmann::detail::exception& e)
             {

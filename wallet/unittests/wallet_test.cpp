@@ -66,12 +66,14 @@ namespace
 
         io::Reactor::Ptr mainReactor{ io::Reactor::create() };
         io::Reactor::Scope scope(*mainReactor);
+        LocalPrivateKeyKeeper receiverKeyKeeper(receiverWalletDB);
 
-        WalletAddress wa = storage::createAddress(*receiverWalletDB, receiverWalletDB->get_MasterKdf());
+        WalletAddress wa = storage::createAddress(*receiverWalletDB, receiverKeyKeeper);
         receiverWalletDB->saveAddress(wa);
         WalletID receiver_id = wa.m_walletID;
 
-        wa = storage::createAddress(*senderWalletDB, senderWalletDB->get_MasterKdf());
+        LocalPrivateKeyKeeper senderKeyKeeper(senderWalletDB);
+        wa = storage::createAddress(*senderWalletDB, senderKeyKeeper);
         senderWalletDB->saveAddress(wa);
         WalletID sender_id = wa.m_walletID;
 
@@ -1164,7 +1166,7 @@ namespace
                 , m_Bbs(*this, m_Nnet, db, keyKeeper)
                 , m_ReceiverID(receiverID)
             {
-                WalletAddress wa = storage::createAddress(*db, db->get_MasterKdf());
+                WalletAddress wa = storage::createAddress(*db, *keyKeeper);
                 db->saveAddress(wa);
                 m_WalletID = wa.m_walletID;
             }

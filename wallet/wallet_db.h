@@ -35,6 +35,8 @@ struct sqlite3;
 
 namespace beam::wallet
 {
+    struct IPrivateKeyKeeper;
+
     const uint32_t EmptyCoinSession = 0;
 
     // Describes a UTXO in the context of the Wallet
@@ -507,8 +509,8 @@ namespace beam::wallet
         bool setTxParameter(IWalletDB& db, const TxID& txID, TxParameterID paramID, const ByteBuffer& value, bool shouldNotifyAboutChanges);
 
         bool changeAddressExpiration(IWalletDB& walletDB, const WalletID& walletID, WalletAddress::ExpirationStatus status);
-        WalletAddress createAddress(IWalletDB& walletDB, Key::IKdf::Ptr sbbsKdf);
-        WalletID generateWalletIDFromIndex(Key::IKdf::Ptr sbbsKdf, uint64_t ownID);
+        WalletAddress createAddress(IWalletDB& walletDB, IPrivateKeyKeeper& keyKeeper);
+        WalletID generateWalletIDFromIndex(IPrivateKeyKeeper& keyKeeper, uint64_t ownID);
 
         Coin::Status GetCoinStatus(const IWalletDB&, const Coin&, Height hTop);
         void DeduceStatus(const IWalletDB&, Coin&, Height hTop);
@@ -576,7 +578,7 @@ namespace beam::wallet
         };
 
         std::string ExportDataToJson(const IWalletDB& db);
-        bool ImportDataFromJson(IWalletDB& db, Key::IKdf::Ptr sbbsKdf, const char* data, size_t size);
+        bool ImportDataFromJson(IWalletDB& db, IPrivateKeyKeeper& keyKeeper, const char* data, size_t size);
 
         std::string TxDetailsInfo(const IWalletDB::Ptr& db, const TxID& txID);
         ByteBuffer ExportPaymentProof(const IWalletDB& db, const TxID& txID);
