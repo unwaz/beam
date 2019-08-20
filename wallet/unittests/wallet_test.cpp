@@ -24,11 +24,14 @@
 #include "wallet/litecoin/options.h"
 #include "wallet/qtum/options.h"
 #include "utility/test_helpers.h"
-#include "../../core/radixtree.h"
-#include "../../core/unittest/mini_blockchain.h"
+#include "core/radixtree.h"
+#include "core/unittest/mini_blockchain.h"
 #include <string_view>
 #include "wallet/wallet_transaction.h"
-#include "../../core/negotiator.h"
+#include "core/negotiator.h"
+#include "node/node.h"
+
+
 
 #include "test_helpers.h"
 
@@ -686,7 +689,7 @@ namespace
                 auto nodeEndpoint = make_shared<proto::FlyClient::NetworkStd>(receiver.m_Wallet);
                 nodeEndpoint->m_Cfg.m_vNodes.push_back(io::Address::localhost().port(32125));
                 nodeEndpoint->Connect();
-                receiver.m_Wallet.AddMessageEndpoint(make_shared<WalletNetworkViaBbs>(receiver.m_Wallet, nodeEndpoint, receiver.m_WalletDB));
+                receiver.m_Wallet.AddMessageEndpoint(make_shared<WalletNetworkViaBbs>(receiver.m_Wallet, nodeEndpoint, receiver.m_WalletDB, receiver.m_Wallet.getKeyKeeper()));
                 receiver.m_Wallet.SetNodeEndpoint(nodeEndpoint);
             }
         };
@@ -1131,6 +1134,175 @@ namespace
         WALLET_CHECK(newSenderCoins[3].m_status == Coin::Available);
         WALLET_CHECK(newSenderCoins[3].m_ID.m_Type == Key::Type::Regular);
 
+    }
+
+
+    uintBig GetRandomSeed()
+    {
+        uintBig seed;
+        std::generate_n(&seed.m_pData[0], seed.nBytes, []() {return uint8_t(std::rand() % 256); });
+        return seed;
+    }
+
+    void TestBbsMessages()
+    {
+        printf("Testing bbs ...\n");
+        io::Reactor::Ptr mainReactor(io::Reactor::create());
+        io::Reactor::Scope scope(*mainReactor);
+        const int Count = 500;
+        string nodePath = "node.db";
+        if (boost::filesystem::exists(nodePath))
+        {
+            boost::filesystem::remove(nodePath);
+        }
+
+        struct MyFlyClient : public proto::FlyClient
+            , public IWalletMessageConsumer
+        {
+            MyFlyClient(IWalletDB::Ptr db, const WalletID& receiverID, IPrivateKeyKeeper::Ptr keyKeeper)
+                : m_Nnet(make_shared<proto::FlyClient::NetworkStd>(*this))
+                , m_Bbs(*this, m_Nnet, db, keyKeeper)
+                , m_ReceiverID(receiverID)
+            {
+                WalletAddress wa = storage::createAddress(*db, db->get_MasterKdf());
+                db->saveAddress(wa);
+                m_WalletID = wa.m_walletID;
+            }
+
+            void Connect(io::Address address)
+            {
+                m_Nnet->m_Cfg.m_vNodes.push_back(address);
+                m_Nnet->Connect();
+            }
+
+            Block::SystemState::IHistory& get_History() override
+            {
+                return m_Headers;
+            }
+
+            void OnWalletMessage(const WalletID& peerID, const SetTxParameter& p) override
+            {
+            }
+
+            void SendMessage()
+            {
+                IWalletMessageEndpoint& endpoint = m_Bbs;
+                ByteBuffer message;
+                std::generate_n(std::back_inserter(message), 10000, []() { return uint8_t(std::rand() % 256); });
+                //endpoint.SendEncryptedMessage(m_ReceiverID, message);
+                SetTxParameter params;
+                params.m_From = m_WalletID;
+                params.m_Type = TxType::Simple;
+                params.m_TxID = wallet::GenerateTxID();
+                params.AddParameter(TxParameterID::Inputs, message);
+
+                endpoint.Send(m_ReceiverID, params);
+            }
+
+            Block::SystemState::HistoryMap m_Headers;
+            std::shared_ptr<proto::FlyClient::NetworkStd> m_Nnet;
+            WalletNetworkViaBbs m_Bbs;
+            WalletID m_ReceiverID;
+            WalletID m_WalletID;
+        };
+
+        struct SenderFlyClient : public MyFlyClient
+        {
+            SenderFlyClient(IWalletDB::Ptr db, const WalletID& receiverID)
+                : m_keyKeeper(make_shared<LocalPrivateKeyKeeper>(db))
+                , MyFlyClient(db, receiverID, m_keyKeeper)
+                , m_Timer(io::Timer::create(io::Reactor::get_Current()))
+            {
+            }
+
+            void OnNewTip() override
+            {
+                if (!m_Sent)
+                {
+                    m_Sent = true;
+                    
+                    for (int i = 0; i < Count; ++i)
+                    {
+                        SendMessage();
+                    }
+                }
+            }
+
+            void OnWalletMessage(const WalletID& peerID, const SetTxParameter& p) override
+            {
+                ++m_ReceivedCount;
+                cout << "Response message received[" << m_ReceivedCount << "] : " << p.m_TxID << '\n';
+
+                m_Timer->start(60000, false, [this]() {OnTimer(); });
+                if (m_ReceivedCount == Count)
+                {
+                    m_Timer->cancel();
+                    io::Reactor::get_Current().stop();
+                }
+            }
+
+            void OnTimer()
+            {
+                io::Reactor::get_Current().stop();
+                WALLET_CHECK(m_ReceivedCount == Count);
+            }
+
+            bool m_Sent = false;
+            
+            io::Timer::Ptr m_Timer;
+            int m_ReceivedCount = 0;
+            IPrivateKeyKeeper::Ptr m_keyKeeper;
+        };
+
+
+        struct ReceiverFlyClient : public MyFlyClient
+        {
+            ReceiverFlyClient(IWalletDB::Ptr db, const WalletID& receiverID)
+                : m_keyKeeper(make_shared<LocalPrivateKeyKeeper>(db))
+                , MyFlyClient(db, receiverID, m_keyKeeper)
+            {
+                
+            }
+
+            void OnWalletMessage(const WalletID& peerID, const SetTxParameter& p) override
+            {
+                ++m_ReceivedCount;
+                cout << "Message received[" << m_ReceivedCount<< "] : " << p.m_TxID << '\n';
+                
+                SendMessage();
+            }
+
+            int m_ReceivedCount = 0;
+            IPrivateKeyKeeper::Ptr m_keyKeeper;
+        };
+
+
+        auto db = createSqliteWalletDB(SenderWalletDB, false);
+        auto treasury = createTreasury(db);
+
+        auto nodeCreator = [](Node& node, const ByteBuffer& treasury, uint16_t port, const std::string& path, const std::vector<io::Address>& peers = {})->io::Address
+        {
+            InitNodeToTest(node, treasury, nullptr, port, 10000, path, peers);
+            io::Address address;
+            address.resolve("127.0.0.1");
+            address.port(port);
+            return address;
+        };
+
+        Node senderNode;
+        auto senderNodeAddress= nodeCreator(senderNode, treasury, 32125, "sender_node.db");
+        Node receiverNode;
+        auto receiverNodeAddress = nodeCreator(receiverNode, treasury, 32126, "receiver_node.db", {senderNodeAddress});
+
+        TestWalletRig receiver("receiver", createReceiverWalletDB(), [](auto) {});
+
+        SenderFlyClient flyClient(db, receiver.m_WalletID);
+        flyClient.Connect(senderNodeAddress);
+
+        ReceiverFlyClient flyClinet2(receiver.m_WalletDB, flyClient.m_WalletID);
+        flyClinet2.Connect(receiverNodeAddress);
+
+        mainReactor->run();
     }
 }
 
@@ -1737,7 +1909,8 @@ int main()
 #endif
     auto logger = beam::Logger::create(logLevel, logLevel);
     Rules::get().FakePoW = true;
-    Rules::get().pForks[1].m_Height = 100500; // needed for lightning network to work
+	Rules::get().pForks[1].m_Height = 100500; // needed for lightning network to work
+    Rules::get().DA.MaxAhead_s = 60 * 1;
     Rules::get().UpdateChecksum();
 
 	TestNegotiation();

@@ -499,7 +499,7 @@ namespace
                 {
                     if (tx->canCancel())
                     {
-                        _wallet.cancel_tx(tx->m_txId);
+                        _wallet.CancelTransaction(tx->m_txId);
                         TxCancel::Response result{ true };
                         doResponse(id, result);
                     }
@@ -1094,7 +1094,7 @@ int main(int argc, char* argv[])
         nnet->m_Cfg.m_vNodes.push_back(node_addr);
         nnet->Connect();
 
-        auto wnet = std::make_shared<WalletNetworkViaBbs>(wallet, nnet, walletDB);
+        auto wnet = std::make_shared<WalletNetworkViaBbs>(wallet, nnet, walletDB, wallet.getKeyKeeper());
 		wallet.AddMessageEndpoint(wnet);
         wallet.SetNodeEndpoint(nnet);
 

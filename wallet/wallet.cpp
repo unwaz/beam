@@ -20,6 +20,7 @@
 #include "utility/logger.h"
 #include "utility/helpers.h"
 #include "swaps/swap_transaction.h"
+
 #include <algorithm>
 #include <random>
 #include <iomanip>
@@ -255,7 +256,7 @@ namespace beam::wallet
         }
 
         TxID txID = GenerateTxID();
-        auto tx = constructTransaction(txID, TxType::Simple);
+        auto tx = ConstructTransaction(txID, TxType::Simple);
 
         tx->SetParameter(TxParameterID::TransactionType, TxType::Simple, false);
         tx->SetParameter(TxParameterID::Lifetime, lifetime, false);
@@ -300,7 +301,7 @@ namespace beam::wallet
         }
 
         auto txID = GenerateTxID();
-        auto tx = constructTransaction(txID, TxType::AtomicSwap);
+        auto tx = ConstructTransaction(txID, TxType::AtomicSwap);
 
         tx->SetParameter(TxParameterID::TransactionType, TxType::AtomicSwap, false);
         tx->SetParameter(TxParameterID::CreateTime, getTimestamp(), false);
@@ -355,7 +356,7 @@ namespace beam::wallet
     {
         auto txID = tx->GetTxID();
         m_ActiveTransactions.emplace(txID, tx);
-        updateTransaction(txID);
+        UpdateTransaction(txID);
     }
 
     void Wallet::RegisterTransactionType(TxType type, BaseTransaction::Creator creator)
@@ -372,7 +373,7 @@ namespace beam::wallet
             if (m_ActiveTransactions.find(tx.m_txId) == m_ActiveTransactions.end())
             {
                 // Reconstruct tx with reset parameters and add it to the active list
-                auto t = constructTransaction(tx.m_txId, tx.m_txType);
+                auto t = ConstructTransaction(tx.m_txId, tx.m_txType);
                 if (t->Rollback(Height(0)))
                 {
                     m_ActiveTransactions.emplace(tx.m_txId, t);
@@ -394,7 +395,7 @@ namespace beam::wallet
     {
         if (tx.canResume() && m_ActiveTransactions.find(tx.m_txId) == m_ActiveTransactions.end())
         {
-            auto t = constructTransaction(tx.m_txId, tx.m_txType);
+            auto t = ConstructTransaction(tx.m_txId, tx.m_txType);
 
             m_ActiveTransactions.emplace(tx.m_txId, t);
             UpdateOnSynced(t);
@@ -414,7 +415,7 @@ namespace beam::wallet
     {
         if (m_AsyncUpdateCounter == 0)
         {
-            LOG_DEBUG() << "Async update started!";
+            LOG_VERBOSE() << "Async update started!";
         }
         ++m_AsyncUpdateCounter;
     }
@@ -423,7 +424,7 @@ namespace beam::wallet
     {
         if (--m_AsyncUpdateCounter == 0)
         {
-            LOG_DEBUG() << "Async update finished!";
+            LOG_VERBOSE() << "Async update finished!";
             if (m_UpdateCompleted)
             {
                 m_UpdateCompleted();
@@ -634,9 +635,9 @@ namespace beam::wallet
         return nullptr;
     }
 
-    void Wallet::OnWalletMessage(const WalletID& myID, SetTxParameter&& msg)
+    void Wallet::OnWalletMessage(const WalletID& myID, const SetTxParameter& msg)
     {
-        auto t = getTransaction(myID, msg);
+        auto t = GetTransaction(myID, msg);
         if (!t)
         {
             return;
@@ -666,7 +667,7 @@ namespace beam::wallet
         }
         if (txChanged)
         {
-            updateTransaction(msg.m_TxID);
+            UpdateTransaction(msg.m_TxID);
         }
     }
 
@@ -678,12 +679,11 @@ namespace beam::wallet
         if (it != m_ActiveTransactions.end())
         {
             it->second->SetParameter(TxParameterID::TransactionRegistered, r.m_Res.m_Value, r.m_SubTxID);
-            updateTransaction(r.m_TxID);
+            UpdateTransaction(r.m_TxID);
         }
     }
 
-    // Implementation of the IWallet::cancel_tx
-    void Wallet::cancel_tx(const TxID& txId)
+    void Wallet::CancelTransaction(const TxID& txId)
     {
         LOG_INFO() << txId << " Canceling tx";
 
@@ -697,8 +697,7 @@ namespace beam::wallet
         }
     }
 
-    // Implementation of the IWallet::delete_tx
-    void Wallet::delete_tx(const TxID& txId)
+    void Wallet::DeleteTransaction(const TxID& txId)
     {
         LOG_INFO() << "deleting tx " << txId;
         if (auto it = m_ActiveTransactions.find(txId); it == m_ActiveTransactions.end())
@@ -711,7 +710,7 @@ namespace beam::wallet
         }
     }
 
-    void Wallet::updateTransaction(const TxID& txID)
+    void Wallet::UpdateTransaction(const TxID& txID)
     {
         auto it = m_ActiveTransactions.find(txID);
         if (it != m_ActiveTransactions.end())
@@ -991,7 +990,7 @@ namespace beam::wallet
             if (m_ActiveTransactions.find(tx.m_txId) == m_ActiveTransactions.end())
             {
                 // Reconstruct tx with reset parameters and add it to the active list
-                auto pTx = constructTransaction(tx.m_txId, tx.m_txType);
+                auto pTx = ConstructTransaction(tx.m_txId, tx.m_txType);
                 if (pTx->Rollback(sTip.m_Height))
                 {
                     m_ActiveTransactions.emplace(tx.m_txId, pTx);
@@ -1156,7 +1155,7 @@ namespace beam::wallet
         PostReqUnique(*pReq);
     }
 
-    void Wallet::subscribe(IWalletObserver* observer)
+    void Wallet::Subscribe(IWalletObserver* observer)
     {
         assert(std::find(m_subscribers.begin(), m_subscribers.end(), observer) == m_subscribers.end());
 
@@ -1165,7 +1164,7 @@ namespace beam::wallet
         m_WalletDB->subscribe(observer);
     }
 
-    void Wallet::unsubscribe(IWalletObserver* observer)
+    void Wallet::Unsubscribe(IWalletObserver* observer)
     {
         auto it = std::find(m_subscribers.begin(), m_subscribers.end(), observer);
 
@@ -1176,7 +1175,7 @@ namespace beam::wallet
         m_WalletDB->unsubscribe(observer);
     }
 
-    BaseTransaction::Ptr Wallet::getTransaction(const WalletID& myID, const SetTxParameter& msg)
+    BaseTransaction::Ptr Wallet::GetTransaction(const WalletID& myID, const SetTxParameter& msg)
     {
         auto it = m_ActiveTransactions.find(msg.m_TxID);
         if (it != m_ActiveTransactions.end())
@@ -1235,7 +1234,7 @@ namespace beam::wallet
             LOG_DEBUG() << msg.m_TxID << " Swap conditions match.";
         }
 
-        auto t = constructTransaction(msg.m_TxID, msg.m_Type);
+        auto t = ConstructTransaction(msg.m_TxID, msg.m_Type);
 
         t->SetParameter(TxParameterID::TransactionType, msg.m_Type, false);
         t->SetParameter(TxParameterID::CreateTime, getTimestamp(), false);
@@ -1255,7 +1254,7 @@ namespace beam::wallet
         return t;
     }
 
-    wallet::BaseTransaction::Ptr Wallet::constructTransaction(const TxID& id, TxType type)
+    wallet::BaseTransaction::Ptr Wallet::ConstructTransaction(const TxID& id, TxType type)
     {
         auto it = m_TxCreators.find(type);
         if (it == m_TxCreators.end())

@@ -76,7 +76,7 @@ WaitHandle run_wallet(const WalletParams& params) {
 			nnet->m_Cfg.m_vNodes.push_back(params.nodeAddress);
 			nnet->Connect();
 
-			wallet.AddMessageEndpoint(std::make_shared<WalletNetworkViaBbs>(wallet, nnet, params.walletDB));
+			wallet.AddMessageEndpoint(std::make_shared<WalletNetworkViaBbs>(wallet, nnet, params.walletDB, wallet.getKeyKeeper()));
 			wallet.SetNodeEndpoint(nnet);
 
             if (sender) {
