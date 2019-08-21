@@ -102,32 +102,16 @@ namespace beam::wallet
 
     const char Wallet::s_szNextUtxoEvt[] = "NextUtxoEvent";
 
-    Wallet::Wallet(IWalletDB::Ptr walletDB, TxCompletedAction&& action, UpdateCompletedAction&& updateCompleted, bool initHW)
+    Wallet::Wallet(IWalletDB::Ptr walletDB, IPrivateKeyKeeper::Ptr keyKeeper, TxCompletedAction&& action, UpdateCompletedAction&& updateCompleted)
         : m_WalletDB{ walletDB }
         , m_TxCompletedAction{move(action)}
         , m_UpdateCompleted{move(updateCompleted)}
         , m_LastSyncTotal(0)
         , m_OwnedNodesOnline(0)
+        , m_KeyKeeper(keyKeeper)
     {
         assert(walletDB);
-#if defined(BEAM_HW_WALLET)
-        if (initHW)
-        {
-            m_KeyKeeper = make_shared<wallet::TrezorKeyKeeper>();
-        }
-        else
-        {
-            m_KeyKeeper = walletDB->get_MasterKdf()
-                ? make_shared<LocalPrivateKeyKeeper>(walletDB)
-                : IPrivateKeyKeeper::Ptr();
-        }
-#else
-        {
-            m_KeyKeeper = walletDB->get_MasterKdf()
-                ? make_shared<LocalPrivateKeyKeeper>(walletDB)
-                : IPrivateKeyKeeper::Ptr();
-        }
-#endif
+
         // the only default type of transaction
         RegisterTransactionType(TxType::Simple, wallet::SimpleTransaction::Create);
 

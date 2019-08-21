@@ -19,11 +19,7 @@
 #include <boost/filesystem.hpp>
 #include <QApplication>
 #include <QTranslator>
-
-#if defined(BEAM_HW_WALLET)
-#include "wallet/hw_wallet.h"
-#include "core/block_rw.h"
-#endif
+#include "wallet/local_private_key_keeper.h"
 
 using namespace beam;
 using namespace beam::wallet;
@@ -209,8 +205,9 @@ void AppModel::start()
         nodeAddrStr = nodeAddr.str();
     }
 
-    m_wallet = std::make_shared<WalletModel>(m_db, nodeAddrStr, m_walletReactor);
+    m_keyKeeper = std::make_shared<LocalPrivateKeyKeeper>(m_db);
 
+    m_wallet = std::make_shared<WalletModel>(m_db, m_keyKeeper, nodeAddrStr, m_walletReactor);
 
     if (m_settings.getRunLocalNode())
     {

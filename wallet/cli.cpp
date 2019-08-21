@@ -28,6 +28,7 @@
 #include "wallet/strings_resources.h"
 #include "wallet/swaps/common.h"
 #include "wallet/swaps/swap_transaction.h"
+#include "wallet/local_private_key_keeper.h"
 #include "core/ecc_native.h"
 #include "core/serialization_adapters.h"
 #include "core/treasury.h"
@@ -471,7 +472,7 @@ namespace
         IPrivateKeyKeeper::Ptr keyKeeper,
         WalletAddress::ExpirationStatus expirationStatus = WalletAddress::ExpirationStatus::OneDay)
     {
-        WalletAddress address = storage::createAddress(*walletDB, *keyKeeper);
+        WalletAddress address = storage::createAddress(*walletDB, keyKeeper);
 
         address.setExpiration(expirationStatus);
         address.m_label = label;
@@ -894,7 +895,7 @@ namespace
             return -1;
         }
         const char* p = (char*)(&buffer[0]);
-        LocalPrivateKeyKeeper keyKeeper(walletDB);
+        auto keyKeeper = std::make_shared<LocalPrivateKeyKeeper>(walletDB);
         return storage::ImportDataFromJson(*walletDB, keyKeeper, p, buffer.size()) ? 0 : -1;
     }
 
@@ -1452,7 +1453,7 @@ int main_impl(int argc, char* argv[])
                         io::Reactor::get_Current().stop();
                     };
 
-                    Wallet wallet{ walletDB, is_server ? Wallet::TxCompletedAction() : txCompleteAction,
+                    Wallet wallet{ walletDB, keyKeeper, is_server ? Wallet::TxCompletedAction() : txCompleteAction,
                                             !coldWallet ? Wallet::UpdateCompletedAction() : []() {io::Reactor::get_Current().stop(); } };
                     {
                         wallet::AsyncContextHolder holder(wallet);
@@ -1490,12 +1491,12 @@ int main_impl(int argc, char* argv[])
                             }
                             nnet->m_Cfg.m_vNodes.push_back(nodeAddress);
                             nnet->Connect();
-                            wallet.AddMessageEndpoint(make_shared<WalletNetworkViaBbs>(wallet, nnet, walletDB, wallet.getKeyKeeper()));
+                            wallet.AddMessageEndpoint(make_shared<WalletNetworkViaBbs>(wallet, nnet, walletDB, keyKeeper));
                             wallet.SetNodeEndpoint(nnet);
                         }
                         else
                         {
-                            wallet.AddMessageEndpoint(make_shared<ColdWalletMessageEndpoint>(wallet, walletDB, wallet.getKeyKeeper()));
+                            wallet.AddMessageEndpoint(make_shared<ColdWalletMessageEndpoint>(wallet, walletDB, keyKeeper));
                         }
 
                         if (btcOptions.is_initialized())

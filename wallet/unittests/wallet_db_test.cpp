@@ -21,8 +21,7 @@
 #include <boost/filesystem.hpp>
 #include <numeric>
 
-// !TODO: should be key_keeper.h here
-#include "wallet/wallet_transaction.h"
+#include "wallet/local_private_key_keeper.h"
 
 using namespace std;
 using namespace ECC;
@@ -550,7 +549,7 @@ void TestAddresses()
     addresses = db->getAddresses(false);
     WALLET_CHECK(addresses.empty());
 
-    LocalPrivateKeyKeeper keyKeeper(db);
+    auto keyKeeper = std::make_shared<LocalPrivateKeyKeeper>(db);
 
     WalletAddress a = {};
     a.m_label = "test label";
@@ -616,7 +615,7 @@ void TestExportImportTx()
 {
     cout << "\nWallet database transactions export/import test\n";
     auto walletDB = createSqliteWalletDB();
-    LocalPrivateKeyKeeper keyKeeper(walletDB);
+    auto keyKeeper = std::make_shared<LocalPrivateKeyKeeper>(walletDB);
 
     WalletAddress wa;
     wa.m_OwnID = (*walletDB).AllocateKidRange(1);

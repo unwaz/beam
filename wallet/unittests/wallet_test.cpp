@@ -30,8 +30,8 @@
 #include "wallet/wallet_transaction.h"
 #include "core/negotiator.h"
 #include "node/node.h"
-
-
+#include "wallet/local_private_key_keeper.h"
+#include "wallet/trezor_key_keeper.h"
 
 #include "test_helpers.h"
 
@@ -66,13 +66,13 @@ namespace
 
         io::Reactor::Ptr mainReactor{ io::Reactor::create() };
         io::Reactor::Scope scope(*mainReactor);
-        LocalPrivateKeyKeeper receiverKeyKeeper(receiverWalletDB);
+        auto receiverKeyKeeper = std::make_shared<LocalPrivateKeyKeeper>(receiverWalletDB);
 
         WalletAddress wa = storage::createAddress(*receiverWalletDB, receiverKeyKeeper);
         receiverWalletDB->saveAddress(wa);
         WalletID receiver_id = wa.m_walletID;
 
-        LocalPrivateKeyKeeper senderKeyKeeper(senderWalletDB);
+        auto senderKeyKeeper = std::make_shared<LocalPrivateKeyKeeper>(senderWalletDB);
         wa = storage::createAddress(*senderWalletDB, senderKeyKeeper);
         senderWalletDB->saveAddress(wa);
         WalletID sender_id = wa.m_walletID;
@@ -86,8 +86,8 @@ namespace
 
         TestNodeNetwork::Shared tnns;
 
-        Wallet sender(senderWalletDB, f);
-        Wallet receiver(receiverWalletDB, f);
+        Wallet sender(senderWalletDB, senderKeyKeeper, f);
+        Wallet receiver(receiverWalletDB, receiverKeyKeeper, f);
 
         auto twn = make_shared<TestWalletNetwork>();
         auto netNodeS = make_shared<TestNodeNetwork>(tnns, sender);
@@ -132,13 +132,7 @@ namespace
         WALLET_CHECK(senderWalletDB->getTxHistory().empty());
 
         TestNode node;
-        TestWalletRig sender("sender", senderWalletDB, [](auto) { io::Reactor::get_Current().stop(); }
-#if defined(BEAM_HW_WALLET)
-            , TestWalletRig::Type::Hardware
-#else
-            , TestWalletRig::Type::Regular
-#endif
-        );
+        TestWalletRig sender("sender", senderWalletDB, [](auto) { io::Reactor::get_Current().stop(); }, TestWalletRig::Type::Regular);
 
         helpers::StopWatch sw;
 
@@ -202,12 +196,7 @@ namespace
         };
 
         TestNode node;
-#if defined(BEAM_HW_WALLET)
-        const auto senderType = TestWalletRig::Type::Hardware;
-#else
-        const auto senderType = TestWalletRig::Type::Regular;
-#endif
-        TestWalletRig sender("sender", createSenderWalletDB(), f, senderType, false, 0);
+        TestWalletRig sender("sender", createSenderWalletDB(), f, TestWalletRig::Type::Regular, false, 0);
         TestWalletRig receiver("receiver", createReceiverWalletDB(), f);
 
         WALLET_CHECK(sender.m_WalletDB->selectCoins(6).size() == 2);
@@ -603,12 +592,7 @@ namespace
         WALLET_CHECK(senderWalletDB->getTxHistory().empty());
 
         TestNode node;
-#if defined(BEAM_HW_WALLET)
-        const auto senderType = TestWalletRig::Type::Hardware;
-#else
-        const auto senderType = TestWalletRig::Type::Regular;
-#endif
-        TestWalletRig sender("sender", senderWalletDB, [](auto) { io::Reactor::get_Current().stop(); }, senderType);
+        TestWalletRig sender("sender", senderWalletDB, [](auto) { io::Reactor::get_Current().stop(); }, TestWalletRig::Type::Regular);
         helpers::StopWatch sw;
 
         sw.start();
@@ -676,12 +660,8 @@ namespace
                 completedCount = 2;
             }
         };
-#if defined(BEAM_HW_WALLET)
-        const auto senderType = TestWalletRig::Type::Hardware;
-#else
-        const auto senderType = TestWalletRig::Type::Regular;
-#endif
-        TestWalletRig sender("sender", createSenderWalletDB(), f, senderType);
+
+        TestWalletRig sender("sender", createSenderWalletDB(), f, TestWalletRig::Type::Regular);
         TestWalletRig receiver("receiver", createReceiverWalletDB(), f, TestWalletRig::Type::Offline);
 
         auto newBlockFunc = [&receiver](Height height)
@@ -691,7 +671,7 @@ namespace
                 auto nodeEndpoint = make_shared<proto::FlyClient::NetworkStd>(receiver.m_Wallet);
                 nodeEndpoint->m_Cfg.m_vNodes.push_back(io::Address::localhost().port(32125));
                 nodeEndpoint->Connect();
-                receiver.m_Wallet.AddMessageEndpoint(make_shared<WalletNetworkViaBbs>(receiver.m_Wallet, nodeEndpoint, receiver.m_WalletDB, receiver.m_Wallet.getKeyKeeper()));
+                receiver.m_Wallet.AddMessageEndpoint(make_shared<WalletNetworkViaBbs>(receiver.m_Wallet, nodeEndpoint, receiver.m_WalletDB, receiver.m_KeyKeeper));
                 receiver.m_Wallet.SetNodeEndpoint(nodeEndpoint);
             }
         };
@@ -774,12 +754,8 @@ namespace
         io::Reactor::Ptr mainReactor{ io::Reactor::create() };
         io::Reactor::Scope scope(*mainReactor);
         EmptyTestGateway gateway;
-#if defined(BEAM_HW_WALLET)
-        const auto senderType = TestWalletRig::Type::Hardware;
-#else
-        const auto senderType = TestWalletRig::Type::Regular;
-#endif
-        TestWalletRig sender("sender", createSenderWalletDB(), Wallet::TxCompletedAction(), senderType);
+
+        TestWalletRig sender("sender", createSenderWalletDB(), Wallet::TxCompletedAction(), TestWalletRig::Type::Regular);
         TestWalletRig receiver("receiver", createReceiverWalletDB());
 
         TxID txID = wallet::GenerateTxID();
@@ -826,12 +802,8 @@ namespace
 
         io::Reactor::Ptr mainReactor{ io::Reactor::create() };
         io::Reactor::Scope scope(*mainReactor);
-#if defined(BEAM_HW_WALLET)
-        const auto senderType = TestWalletRig::Type::Hardware;
-#else
-        const auto senderType = TestWalletRig::Type::Regular;
-#endif
-        TestWalletRig sender("sender", createSenderWalletDB(), Wallet::TxCompletedAction(), senderType);
+
+        TestWalletRig sender("sender", createSenderWalletDB(), Wallet::TxCompletedAction(), TestWalletRig::Type::Regular);
         TestWalletRig receiver("receiver", createReceiverWalletDB());
         Height currentHeight = sender.m_WalletDB->getCurrentHeight();
 
@@ -1166,7 +1138,7 @@ namespace
                 , m_Bbs(*this, m_Nnet, db, keyKeeper)
                 , m_ReceiverID(receiverID)
             {
-                WalletAddress wa = storage::createAddress(*db, *keyKeeper);
+                WalletAddress wa = storage::createAddress(*db, keyKeeper);
                 db->saveAddress(wa);
                 m_WalletID = wa.m_walletID;
             }

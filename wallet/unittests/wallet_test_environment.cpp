@@ -346,18 +346,18 @@ struct TestWalletRig
     {
         Regular,
         ColdWallet,
-        Offline,
-        Hardware
+        Offline
     };
+
     TestWalletRig(const string& name, IWalletDB::Ptr walletDB, Wallet::TxCompletedAction&& action = Wallet::TxCompletedAction(), Type type = Type::Regular, bool oneTimeBbsEndpoint = false, uint32_t nodePollPeriod_ms = 0)
         : m_WalletDB{ walletDB }
-        , m_Wallet{ m_WalletDB, move(action),( type == Type::ColdWallet) ? []() {io::Reactor::get_Current().stop(); } : Wallet::UpdateCompletedAction(), type == Type::Hardware }
+        , m_KeyKeeper(make_shared<LocalPrivateKeyKeeper>(m_WalletDB))
+        , m_Wallet{ m_WalletDB, m_KeyKeeper, move(action),( type == Type::ColdWallet) ? []() {io::Reactor::get_Current().stop(); } : Wallet::UpdateCompletedAction() }
     {
-        m_KeyKeeper = m_Wallet.getKeyKeeper();
 
         if (m_WalletDB->get_MasterKdf()) // can create secrets
         {
-            WalletAddress wa = storage::createAddress(*m_WalletDB, *m_KeyKeeper);
+            WalletAddress wa = storage::createAddress(*m_WalletDB, m_KeyKeeper);
             m_WalletDB->saveAddress(wa);
             m_WalletID = wa.m_walletID;
         }
@@ -374,7 +374,6 @@ struct TestWalletRig
                 m_Wallet.AddMessageEndpoint(make_shared<ColdWalletMessageEndpoint>(m_Wallet, m_WalletDB, m_KeyKeeper));
                 break;
             }
-        case Type::Hardware:
         case Type::Regular:
             {
                 auto nodeEndpoint = make_shared<proto::FlyClient::NetworkStd>(m_Wallet);

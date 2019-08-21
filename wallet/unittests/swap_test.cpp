@@ -26,6 +26,7 @@
 #include "core/unittest/mini_blockchain.h"
 #include <string_view>
 #include "wallet/wallet_transaction.h"
+#include "wallet/local_private_key_keeper.h"
 #include "core/negotiator.h"
 #include "node/node.h"
 
@@ -516,7 +517,7 @@ void ExpireByResponseTime(bool isBeamSide)
     sender->m_Wallet.initBitcoin(*mainReactor, aliceOptions);
 
     auto db = createReceiverWalletDB();
-    LocalPrivateKeyKeeper keyKeeper(db);
+    auto keyKeeper = std::make_shared<LocalPrivateKeyKeeper>(db);
     WalletAddress receiverWalletAddress = storage::createAddress(*db, keyKeeper);
     WalletID receiverWalletID = receiverWalletAddress.m_walletID;
 

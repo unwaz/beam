@@ -14,6 +14,8 @@ set(WALLET_SRC
     wallet_db.cpp
     wallet_client.h
     wallet_client.cpp
+    local_private_key_keeper.cpp
+    trezor_key_keeper.cpp
     swaps/swap_transaction.cpp
     swaps/lock_tx_builder.cpp
     swaps/shared_tx_builder.cpp

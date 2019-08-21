@@ -1329,9 +1329,9 @@ namespace beam::wallet
 
     beam::Key::IPKdf::Ptr WalletDB::get_OwnerKdf() const
     {
-//#if defined(BEAM_HW_WALLET)
-//        assert(!"Don't call this if you use HW wallet!");
-//#endif
+#if defined(BEAM_HW_WALLET)
+        assert(!"Don't call this if you use HW wallet!");
+#endif
         return m_OwnerKdf;
     }
 
@@ -2732,7 +2732,7 @@ namespace beam::wallet
             });
         }
 
-        WalletAddress createAddress(IWalletDB& walletDB, IPrivateKeyKeeper& keyKeeper)
+        WalletAddress createAddress(IWalletDB& walletDB, IPrivateKeyKeeper::Ptr keyKeeper)
         {
             WalletAddress newAddress;
             newAddress.m_createTime = beam::getTimestamp();
@@ -2742,9 +2742,9 @@ namespace beam::wallet
             return newAddress;
         }
 
-        WalletID generateWalletIDFromIndex(IPrivateKeyKeeper& keyKeeper, uint64_t ownID)
+        WalletID generateWalletIDFromIndex(IPrivateKeyKeeper::Ptr keyKeeper, uint64_t ownID)
         {
-            if (!keyKeeper.get_SbbsKdf())
+            if (!keyKeeper->get_SbbsKdf())
             {
                 throw CannotGenerateSecretException();
             }
@@ -2752,7 +2752,7 @@ namespace beam::wallet
 
             ECC::Scalar::Native sk;
 
-            keyKeeper.get_SbbsKdf()->DeriveKey(sk, Key::ID(ownID, Key::Type::Bbs));
+            keyKeeper->get_SbbsKdf()->DeriveKey(sk, Key::ID(ownID, Key::Type::Bbs));
 
             proto::Sk2Pk(walletID.m_Pk, sk);
 
@@ -2823,7 +2823,7 @@ namespace beam::wallet
             const string OwnAddressesName = "OwnAddresses";
             const string TransactionParametersName = "TransactionParameters";
 
-            bool ImportAddressesFromJson(IWalletDB& db, IPrivateKeyKeeper& keyKeeper, const json& obj)
+            bool ImportAddressesFromJson(IWalletDB& db, IPrivateKeyKeeper::Ptr keyKeeper, const json& obj)
             {
                 if (obj.find(OwnAddressesName) == obj.end())
                 {
@@ -2855,7 +2855,7 @@ namespace beam::wallet
                 return true;
             }
 
-            bool ImportTransactionsFromJson(IWalletDB& db, IPrivateKeyKeeper& keyKeeper, const json& obj)
+            bool ImportTransactionsFromJson(IWalletDB& db, IPrivateKeyKeeper::Ptr keyKeeper, const json& obj)
             {
                 if (obj.find(TransactionParametersName) == obj.end())
                 {
@@ -2981,7 +2981,7 @@ namespace beam::wallet
             return res.dump();
         }
 
-        bool ImportDataFromJson(IWalletDB& db, IPrivateKeyKeeper& keyKeeper, const char* data, size_t size)
+        bool ImportDataFromJson(IWalletDB& db, IPrivateKeyKeeper::Ptr keyKeeper, const char* data, size_t size)
         {
             try
             {

@@ -19,6 +19,7 @@
 #include "utility/logger.h"
 #include <future>
 #include <boost/filesystem.hpp>
+#include "wallet/local_private_key_keeper.h"
 
 namespace beam {
     using namespace wallet;
@@ -70,13 +71,14 @@ WaitHandle run_wallet(const WalletParams& params) {
 //                params.walletDB->addPeer(receiverPeer);
 //            }
 
-			Wallet wallet{ params.walletDB, [](auto) { io::Reactor::get_Current().stop(); } };
+            auto keyKeeper = std::make_shared<LocalPrivateKeyKeeper>(params.walletDB);
+			Wallet wallet{ params.walletDB, keyKeeper, [](auto) { io::Reactor::get_Current().stop(); } };
 
 			auto nnet = std::make_shared<proto::FlyClient::NetworkStd>(wallet);
 			nnet->m_Cfg.m_vNodes.push_back(params.nodeAddress);
 			nnet->Connect();
 
-			wallet.AddMessageEndpoint(std::make_shared<WalletNetworkViaBbs>(wallet, nnet, params.walletDB, wallet.getKeyKeeper()));
+			wallet.AddMessageEndpoint(std::make_shared<WalletNetworkViaBbs>(wallet, nnet, params.walletDB, keyKeeper));
 			wallet.SetNodeEndpoint(nnet);
 
             if (sender) {
@@ -168,7 +170,7 @@ void test_offline(bool twoNodes) {
         receiverParams.nodeAddress = nodeAddress;
     }
 
-    LocalPrivateKeyKeeper keyKeeper(senderParams.walletDB);
+    auto keyKeeper = std::make_shared<LocalPrivateKeyKeeper>(senderParams.walletDB);
 
     senderParams.reactor = io::Reactor::create();
     senderParams.walletDB = init_wallet_db("_sender", &nodeParams.walletSeed, senderParams.reactor);
