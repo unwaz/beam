@@ -374,6 +374,7 @@ struct TestWalletRig
                 m_Wallet.AddMessageEndpoint(make_shared<ColdWalletMessageEndpoint>(m_Wallet, m_WalletDB, m_KeyKeeper));
                 break;
             }
+
         case Type::Regular:
             {
                 auto nodeEndpoint = make_shared<proto::FlyClient::NetworkStd>(m_Wallet);

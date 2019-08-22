@@ -66,11 +66,10 @@ bool AppModel::createWallet(const SecString& seed, const SecString& pass)
     m_db = WalletDB::init(dbFilePath, pass, seed.hash(), m_walletReactor);
     if (!m_db) return false;
 
-    // !TODO: uncomment this, and pass KeyKeeper to createAddress()
-    //// generate default address
-    //WalletAddress address = storage::createAddress(*m_db);
-    //address.m_label = "default";
-    //m_db->saveAddress(address);
+    // generate default address
+    WalletAddress address = storage::createAddress(*m_db, m_keyKeeper);
+    address.m_label = "default";
+    m_db->saveAddress(address);
 
     onWalledOpened(pass);
     return true;

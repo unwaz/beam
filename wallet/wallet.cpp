@@ -111,7 +111,6 @@ namespace beam::wallet
         , m_KeyKeeper(keyKeeper)
     {
         assert(walletDB);
-
         // the only default type of transaction
         RegisterTransactionType(TxType::Simple, wallet::SimpleTransaction::Create);
 
@@ -142,9 +141,7 @@ namespace beam::wallet
     // Fly client implementation
     void Wallet::get_Kdf(Key::IKdf::Ptr& pKdf)
     {
-#if !defined(BEAM_HW_WALLET)
         pKdf = m_WalletDB->get_MasterKdf();
-#endif
     }
 
     void Wallet::get_OwnerKdf(Key::IPKdf::Ptr& ownerKdf)
@@ -832,19 +829,18 @@ namespace beam::wallet
         {
             commitmentFunc = [this](const auto& kidv) {return m_KeyKeeper->GeneratePublicKeySync(kidv, true); };
         }
-        // TODO: do we need this part, we have KeyKeeper always initialized
-        //else if (auto ownerKdf = m_WalletDB->get_OwnerKdf(); ownerKdf)
-        //{
-        //    commitmentFunc = [ownerKdf](const auto& kidv)
-        //    {
-        //        Point::Native pt;
-        //        SwitchCommitment sw;
+        else if (auto ownerKdf = m_WalletDB->get_OwnerKdf(); ownerKdf)
+        {
+            commitmentFunc = [ownerKdf](const auto& kidv)
+            {
+                Point::Native pt;
+                SwitchCommitment sw;
 
-        //        sw.Recover(pt, *ownerKdf, kidv);
-        //        Point commitment = pt;
-        //        return commitment;
-        //    };
-        //}
+                sw.Recover(pt, *ownerKdf, kidv);
+                Point commitment = pt;
+                return commitment;
+            };
+        }
 
 		for (size_t i = 0; i < v.size(); i++)
 		{

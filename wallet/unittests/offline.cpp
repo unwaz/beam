@@ -170,10 +170,10 @@ void test_offline(bool twoNodes) {
         receiverParams.nodeAddress = nodeAddress;
     }
 
-    auto keyKeeper = std::make_shared<LocalPrivateKeyKeeper>(senderParams.walletDB);
-
     senderParams.reactor = io::Reactor::create();
     senderParams.walletDB = init_wallet_db("_sender", &nodeParams.walletSeed, senderParams.reactor);
+    auto keyKeeper = std::make_shared<LocalPrivateKeyKeeper>(senderParams.walletDB);
+
     receiverParams.reactor = io::Reactor::create();
     receiverParams.walletDB = init_wallet_db("_receiver", 0, receiverParams.reactor);
 

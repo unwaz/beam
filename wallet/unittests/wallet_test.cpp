@@ -132,8 +132,7 @@ namespace
         WALLET_CHECK(senderWalletDB->getTxHistory().empty());
 
         TestNode node;
-        TestWalletRig sender("sender", senderWalletDB, [](auto) { io::Reactor::get_Current().stop(); }, TestWalletRig::Type::Regular);
-
+        TestWalletRig sender("sender", senderWalletDB, [](auto) { io::Reactor::get_Current().stop(); });
         helpers::StopWatch sw;
 
         sw.start();
@@ -592,7 +591,7 @@ namespace
         WALLET_CHECK(senderWalletDB->getTxHistory().empty());
 
         TestNode node;
-        TestWalletRig sender("sender", senderWalletDB, [](auto) { io::Reactor::get_Current().stop(); }, TestWalletRig::Type::Regular);
+        TestWalletRig sender("sender", senderWalletDB, [](auto) { io::Reactor::get_Current().stop(); });
         helpers::StopWatch sw;
 
         sw.start();
@@ -661,7 +660,7 @@ namespace
             }
         };
 
-        TestWalletRig sender("sender", createSenderWalletDB(), f, TestWalletRig::Type::Regular);
+        TestWalletRig sender("sender", createSenderWalletDB(), f);
         TestWalletRig receiver("receiver", createReceiverWalletDB(), f, TestWalletRig::Type::Offline);
 
         auto newBlockFunc = [&receiver](Height height)
@@ -754,8 +753,7 @@ namespace
         io::Reactor::Ptr mainReactor{ io::Reactor::create() };
         io::Reactor::Scope scope(*mainReactor);
         EmptyTestGateway gateway;
-
-        TestWalletRig sender("sender", createSenderWalletDB(), Wallet::TxCompletedAction(), TestWalletRig::Type::Regular);
+        TestWalletRig sender("sender", createSenderWalletDB());
         TestWalletRig receiver("receiver", createReceiverWalletDB());
 
         TxID txID = wallet::GenerateTxID();
@@ -803,7 +801,7 @@ namespace
         io::Reactor::Ptr mainReactor{ io::Reactor::create() };
         io::Reactor::Scope scope(*mainReactor);
 
-        TestWalletRig sender("sender", createSenderWalletDB(), Wallet::TxCompletedAction(), TestWalletRig::Type::Regular);
+        TestWalletRig sender("sender", createSenderWalletDB());
         TestWalletRig receiver("receiver", createReceiverWalletDB());
         Height currentHeight = sender.m_WalletDB->getCurrentHeight();
 
@@ -1917,6 +1915,8 @@ int main()
     TestHWCommitment();
     TestHWWallet();
 #endif
+
+    //TestBbsMessages();
 
     assert(g_failureCount == 0);
     return WALLET_CHECK_RESULT;

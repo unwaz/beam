@@ -130,7 +130,6 @@ namespace beam::wallet {
             pAddr->m_ExpirationTime = address.getExpirationTime();
             pAddr->m_Wid.m_OwnID = address.m_OwnID;
 
-            // TODO: get_SBBS_KDF should be here?
             if (m_keyKeeper->get_SbbsKdf())
             {
                 m_keyKeeper->get_SbbsKdf()->DeriveKey(pAddr->m_sk, Key::ID(address.m_OwnID, Key::Type::Bbs));

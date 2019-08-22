@@ -1006,18 +1006,18 @@ namespace beam::wallet
                 walletDB->setPrivateVarRaw(WalletSeed, &secretKey.V, sizeof(secretKey.V));
 
                 // store owner key (public)
-                //{
-                //    Key::IKdf::Ptr pKey = walletDB->get_MasterKdf();
-                //    const ECC::HKdf& kdf = static_cast<ECC::HKdf&>(*pKey);
+                {
+                    Key::IKdf::Ptr pKey = walletDB->get_MasterKdf();
+                    const ECC::HKdf& kdf = static_cast<ECC::HKdf&>(*pKey);
 
-                //    auto publicKdf = make_shared<ECC::HKdfPub>();
-                //    publicKdf->GenerateFrom(kdf);
-                //    ECC::NoLeak<ECC::HKdfPub::Packed> packedOwnerKey;
-                //    publicKdf->Export(packedOwnerKey.V);
-                //     
-                //    storage::setVar(*walletDB, OwnerKey, packedOwnerKey.V);
-                //    walletDB->m_OwnerKdf = publicKdf;
-                //}
+                    auto publicKdf = make_shared<ECC::HKdfPub>();
+                    publicKdf->GenerateFrom(kdf);
+                    ECC::NoLeak<ECC::HKdfPub::Packed> packedOwnerKey;
+                    publicKdf->Export(packedOwnerKey.V);
+
+                    storage::setVar(*walletDB, OwnerKey, packedOwnerKey.V);
+                    walletDB->m_OwnerKdf = publicKdf;
+                }
 
                 storage::setVar(*walletDB, Version, DbVersion);
             }
@@ -1246,10 +1246,7 @@ namespace beam::wallet
                             }
                             walletDB->m_OwnerKdf = publicKdf;
                         }
-                        else
-                        {
-                            assert(!"Owner key should be stored in DB if you use HW wallet!");
-                        }
+
                     }
                 }
 
@@ -1310,28 +1307,16 @@ namespace beam::wallet
 
     Key::IKdf::Ptr WalletDB::get_MasterKdf() const
     {
-        // TODO: Don't call this if you use HW wallet!
-#if defined(BEAM_HW_WALLET)
-        assert(false);
-        return nullptr;
-#else
         return m_pKdf;
-#endif
     }
 
 	Key::IKdf::Ptr IWalletDB::get_ChildKdf(const Key::IDV& kidv) const
 	{
-#if defined(BEAM_HW_WALLET)
-        assert(!"Don't call this if you use HW wallet!");
-#endif
 		return MasterKey::get_Child(get_MasterKdf(), kidv);
 	}
 
     beam::Key::IPKdf::Ptr WalletDB::get_OwnerKdf() const
     {
-#if defined(BEAM_HW_WALLET)
-        assert(!"Don't call this if you use HW wallet!");
-#endif
         return m_OwnerKdf;
     }
 

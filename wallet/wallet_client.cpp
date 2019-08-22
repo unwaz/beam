@@ -228,7 +228,7 @@ namespace beam::wallet
                     static const unsigned LOG_CLEANUP_PERIOD_SEC = 120 * 3600; // 5 days
                     LogRotation logRotation(*m_reactor, LOG_ROTATION_PERIOD_SEC, LOG_CLEANUP_PERIOD_SEC);
 
-                    auto wallet = make_shared<Wallet>(m_walletDB, m_keyKeeper, Wallet::TxCompletedAction(), Wallet::UpdateCompletedAction());
+                    auto wallet = make_shared<Wallet>(m_walletDB, m_keyKeeper);
                     m_wallet = wallet;
 
                     class NodeNetwork final: public proto::FlyClient::NetworkStd
@@ -345,8 +345,6 @@ namespace beam::wallet
 
     std::string WalletClient::exportOwnerKey(const beam::SecString& pass) const
     {
-        // TODO: pls use KeyKeeper interface here
-        assert(false);
         Key::IKdf::Ptr pKey = m_walletDB->get_MasterKdf();
         const ECC::HKdf& kdf = static_cast<ECC::HKdf&>(*pKey);
 

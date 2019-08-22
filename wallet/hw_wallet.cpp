@@ -221,7 +221,7 @@ namespace beam
                         result.m_P_Tag.m_pCondensed[1].m_Value = beam::Blob(rp.p_tag.condensed[1], 32);
                     }
 
-                    for (int c = 0; c < INNER_PRODUCT_N_CYCLES; c++)
+                    for (unsigned int c = 0; c < INNER_PRODUCT_N_CYCLES; c++)
                     {
                         for (int i = 0; i < 2; i++)
                         {
