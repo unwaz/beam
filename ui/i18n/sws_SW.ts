@@ -13,19 +13,19 @@
     </message>
     <message id="general-comment">
         <source>Comment</source>
-        <translation>Comment</translation>
+        <translation>Maoni</translation>
     </message>
     <message id="general-contact">
         <source>Contact</source>
-        <translation>Contact</translation>
+        <translation>Mawasiliano</translation>
     </message>
     <message id="general-category">
         <source>Category</source>
-        <translation>Category</translation>
+        <translation>Aina</translation>
     </message>
     <message id="general-actions">
         <source>Actions</source>
-        <translation>Actions</translation>
+        <translation>Vitendo</translation>
     </message>
     <message id="general-address">
         <source>Address</source>
